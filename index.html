@@ -329,10 +329,44 @@
       color: var(--gray-500);
       margin-top: 10px;
     }
+    
+    .loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      background: var(--success);
+      color: white;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transform: translateX(150%);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+    
+    .notification.show {
+      transform: translateX(0);
+    }
+    
+    .notification.error {
+      background: var(--danger);
+    }
+    
+    .notification.warning {
+      background: var(--warning);
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <div id="notification" class="notification"></div>
+    
     <header>
       <h1><i class="fas fa-car-battery"></i> Battery Changeover — Live Dashboard</h1>
       <div class="controls">
@@ -346,16 +380,16 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">Battery 1</div>
-          <div class="status ok"><i class="fas fa-check-circle"></i> Normal</div>
+          <div class="status ok" id="b1Status"><i class="fas fa-check-circle"></i> Normal</div>
         </div>
         <div class="gauge-container">
           <div class="gauge">
             <svg class="gauge-svg" viewBox="0 0 120 120">
               <circle class="gauge-background" cx="60" cy="60" r="54"></circle>
-              <circle class="gauge-fill" cx="60" cy="60" r="54" 
+              <circle class="gauge-fill" id="b1GaugeFill" cx="60" cy="60" r="54" 
                       stroke="#10b981" 
                       stroke-dasharray="339.292" 
-                      stroke-dashoffset="135.717"></circle>
+                      stroke-dashoffset="339.292"></circle>
             </svg>
             <div class="gauge-value" id="b1volt">—</div>
             <div class="gauge-label">Voltage</div>
@@ -368,16 +402,16 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">Battery 2</div>
-          <div class="status warn"><i class="fas fa-exclamation-triangle"></i> Warning</div>
+          <div class="status warn" id="b2Status"><i class="fas fa-exclamation-triangle"></i> Warning</div>
         </div>
         <div class="gauge-container">
           <div class="gauge">
             <svg class="gauge-svg" viewBox="0 0 120 120">
               <circle class="gauge-background" cx="60" cy="60" r="54"></circle>
-              <circle class="gauge-fill" cx="60" cy="60" r="54" 
+              <circle class="gauge-fill" id="b2GaugeFill" cx="60" cy="60" r="54" 
                       stroke="#f59e0b" 
                       stroke-dasharray="339.292" 
-                      stroke-dashoffset="203.575"></circle>
+                      stroke-dashoffset="339.292"></circle>
             </svg>
             <div class="gauge-value" id="b2volt">—</div>
             <div class="gauge-label">Voltage</div>
@@ -390,16 +424,16 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">Load</div>
-          <div class="status ok"><i class="fas fa-check-circle"></i> Stable</div>
+          <div class="status ok" id="loadStatus"><i class="fas fa-check-circle"></i> Stable</div>
         </div>
         <div class="gauge-container">
           <div class="gauge">
             <svg class="gauge-svg" viewBox="0 0 120 120">
               <circle class="gauge-background" cx="60" cy="60" r="54"></circle>
-              <circle class="gauge-fill" cx="60" cy="60" r="54" 
+              <circle class="gauge-fill" id="loadGaugeFill" cx="60" cy="60" r="54" 
                       stroke="#2563eb" 
                       stroke-dasharray="339.292" 
-                      stroke-dashoffset="67.858"></circle>
+                      stroke-dashoffset="339.292"></circle>
             </svg>
             <div class="gauge-value" id="loadvolt">—</div>
             <div class="gauge-label">Voltage</div>
@@ -495,7 +529,21 @@
     const b1SummaryEl = document.getElementById('b1Summary');
     const b2SummaryEl = document.getElementById('b2Summary');
     const loadSummaryEl = document.getElementById('loadSummary');
+    const b1StatusEl = document.getElementById('b1Status');
+    const b2StatusEl = document.getElementById('b2Status');
+    const loadStatusEl = document.getElementById('loadStatus');
+    const notificationEl = document.getElementById('notification');
+    
     document.getElementById('dbUrl').textContent = firebaseConfig.databaseURL;
+
+    // Show notification
+    function showNotification(message, type = 'success') {
+      notificationEl.textContent = message;
+      notificationEl.className = `notification ${type} show`;
+      setTimeout(() => {
+        notificationEl.classList.remove('show');
+      }, 3000);
+    }
 
     // Gauge update function
     function updateGauge(elementId, value, min = 10, max = 15) {
@@ -515,24 +563,63 @@
       }
     }
 
-    // Fixed timestamp conversion function
-    function millisKeyToTime(k) {
-      const n = parseInt(k);
-      if (!isNaN(n)) {
-        // Check if the timestamp is in seconds (likely < 2,000,000,000) or milliseconds
-        const timestamp = n < 2000000000 ? n * 1000 : n;
-        const d = new Date(timestamp);
+    // Update battery status indicators
+    function updateBatteryStatus(element, voltage) {
+      if (voltage >= 12.5) {
+        element.className = 'status ok';
+        element.innerHTML = '<i class="fas fa-check-circle"></i> Normal';
+      } else if (voltage >= 11.5) {
+        element.className = 'status warn';
+        element.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Warning';
+      } else {
+        element.className = 'status err';
+        element.innerHTML = '<i class="fas fa-times-circle"></i> Critical';
+      }
+    }
+
+    // Improved timestamp conversion function
+    function convertTimestamp(timestamp) {
+      // Handle different timestamp formats
+      let date;
+      
+      if (typeof timestamp === 'string') {
+        // Try to parse as ISO string first
+        date = new Date(timestamp);
+        if (!isNaN(date.getTime())) return date;
         
-        // Check if date is valid
-        if (isNaN(d.getTime())) {
-          return k; // Return original key if invalid date
+        // Try to parse as milliseconds
+        const ms = parseInt(timestamp);
+        if (!isNaN(ms)) {
+          date = new Date(ms);
+          if (!isNaN(date.getTime())) return date;
+          
+          // Try seconds if ms is too small (before 1970)
+          if (ms < 10000000000) {
+            date = new Date(ms * 1000);
+            if (!isNaN(date.getTime())) return date;
+          }
+        }
+      } else if (typeof timestamp === 'number') {
+        // Handle numeric timestamps
+        if (timestamp < 10000000000) {
+          // Likely seconds
+          date = new Date(timestamp * 1000);
+        } else {
+          // Likely milliseconds
+          date = new Date(timestamp);
         }
         
-        // Return formatted date and time
-        return d.toLocaleString();
+        if (!isNaN(date.getTime())) return date;
       }
-      // Return original key if not a number
-      return k;
+      
+      // If all else fails, return current time
+      console.warn('Invalid timestamp:', timestamp, 'using current time instead');
+      return new Date();
+    }
+
+    function formatTimestamp(timestamp) {
+      const date = convertTimestamp(timestamp);
+      return date.toLocaleString();
     }
 
     // Listen live to main nodes
@@ -545,35 +632,49 @@
       const v = snap.val() || {};
       if (v.Voltage !== undefined) {
         const voltage = parseFloat(v.Voltage);
-        b1voltEl.textContent = voltage.toFixed(2) + ' V';
+        b1voltEl.textContent = voltage.toFixed(2);
         b1SummaryEl.textContent = voltage.toFixed(2) + ' V';
-        updateGauge('b1volt', voltage);
+        updateGauge('b1GaugeFill', voltage);
+        updateBatteryStatus(b1StatusEl, voltage);
       }
       if (v.Temperature !== undefined) b1tempEl.textContent = parseFloat(v.Temperature).toFixed(1) + ' °C';
-      lastSeenEl.textContent = new Date().toLocaleString();
+      lastSeenEl.textContent = new Date().toLocaleTimeString();
     });
 
     onValue(b2Ref, (snap) => {
       const v = snap.val() || {};
       if (v.Voltage !== undefined) {
         const voltage = parseFloat(v.Voltage);
-        b2voltEl.textContent = voltage.toFixed(2) + ' V';
+        b2voltEl.textContent = voltage.toFixed(2);
         b2SummaryEl.textContent = voltage.toFixed(2) + ' V';
-        updateGauge('b2volt', voltage);
+        updateGauge('b2GaugeFill', voltage);
+        updateBatteryStatus(b2StatusEl, voltage);
       }
       if (v.Temperature !== undefined) b2tempEl.textContent = parseFloat(v.Temperature).toFixed(1) + ' °C';
-      lastSeenEl.textContent = new Date().toLocaleString();
+      lastSeenEl.textContent = new Date().toLocaleTimeString();
     });
 
     onValue(loadRef, (snap) => {
       const v = snap.val() || {};
       if (v.Voltage !== undefined) {
         const voltage = parseFloat(v.Voltage);
-        loadvoltEl.textContent = voltage.toFixed(2) + ' V';
+        loadvoltEl.textContent = voltage.toFixed(2);
         loadSummaryEl.textContent = voltage.toFixed(2) + ' V';
-        updateGauge('loadvolt', voltage);
+        updateGauge('loadGaugeFill', voltage);
+        
+        // Update load status
+        if (voltage >= 12.0) {
+          loadStatusEl.className = 'status ok';
+          loadStatusEl.innerHTML = '<i class="fas fa-check-circle"></i> Stable';
+        } else if (voltage >= 11.0) {
+          loadStatusEl.className = 'status warn';
+          loadStatusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Low';
+        } else {
+          loadStatusEl.className = 'status err';
+          loadStatusEl.innerHTML = '<i class="fas fa-times-circle"></i> Critical';
+        }
       }
-      lastSeenEl.textContent = new Date().toLocaleString();
+      lastSeenEl.textContent = new Date().toLocaleTimeString();
     });
 
     onValue(sysRef, (snap) => {
@@ -600,7 +701,10 @@
       keys.forEach(k => {
         appendHistoryRow(k, val[k]);
       });
-    }).catch(err => console.warn('History fetch failed', err));
+    }).catch(err => {
+      console.warn('History fetch failed', err);
+      showNotification('Failed to load history data', 'error');
+    });
 
     // listen for new entries (child_added)
     onChildAdded(historyRef, (snap) => {
@@ -615,7 +719,7 @@
       const statusClass = (data.Status || '').includes('NO SAFE') ? 'err' : 
                          (data.Status || '').includes('Using') ? 'ok' : 'warn';
       
-      tr.innerHTML = `<td>${millisKeyToTime(key)}</td>
+      tr.innerHTML = `<td>${formatTimestamp(key)}</td>
                       <td>${escapeHtml(data.ActiveBattery || '')}</td>
                       <td>${num(data.Bat1_V)}</td>
                       <td>${num(data.Bat2_V)}</td>
@@ -626,12 +730,12 @@
 
     function prependHistoryRow(key, data) {
       // avoid duplicates if already present
-      if ([...historyTbody.querySelectorAll('tr')].some(r => r.firstChild && r.firstChild.textContent === millisKeyToTime(key))) return;
+      if ([...historyTbody.querySelectorAll('tr')].some(r => r.firstChild && r.firstChild.textContent === formatTimestamp(key))) return;
       const tr = document.createElement('tr');
       const statusClass = (data.Status || '').includes('NO SAFE') ? 'err' : 
                          (data.Status || '').includes('Using') ? 'ok' : 'warn';
       
-      tr.innerHTML = `<td>${millisKeyToTime(key)}</td>
+      tr.innerHTML = `<td>${formatTimestamp(key)}</td>
                       <td>${escapeHtml(data.ActiveBattery || '')}</td>
                       <td>${num(data.Bat1_V)}</td>
                       <td>${num(data.Bat2_V)}</td>
@@ -647,32 +751,46 @@
 
     // manual refresh button
     document.getElementById('refreshBtn').addEventListener('click', () => {
+      document.body.classList.add('loading');
       // snapshot read
       Promise.all([get(b1Ref), get(b2Ref), get(loadRef), get(sysRef)]).then(results => {
-        // update UI immediately using same handlers
-        results.forEach(r => { if (r.exists()) {/* onValue already updates */} });
-        alert('Refreshed (UI should already reflect live values).');
-      }).catch(e=>alert('Refresh failed: '+e));
+        document.body.classList.remove('loading');
+        showNotification('Data refreshed successfully');
+      }).catch(e => {
+        document.body.classList.remove('loading');
+        showNotification('Refresh failed: ' + e.message, 'error');
+      });
     });
 
     // CSV download for history
     document.getElementById('downloadCsv').addEventListener('click', async () => {
       try {
+        document.body.classList.add('loading');
         const snap = await get(query(historyRef, orderByKey()));
         const data = snap.val() || {};
         const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b)); // oldest first
         const rows = [['Time','ActiveBattery','Bat1_V','Bat2_V','Load_V','Status']];
         keys.forEach(k=>{
           const d = data[k]||{};
-          rows.push([millisKeyToTime(k), d.ActiveBattery||'', d.Bat1_V||'', d.Bat2_V||'', d.Load_V||'', d.Status||'']);
+          rows.push([formatTimestamp(k), d.ActiveBattery||'', d.Bat1_V||'', d.Bat2_V||'', d.Load_V||'', d.Status||'']);
         });
         const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
         const blob = new Blob([csv], {type:'text/csv'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'history.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      } catch(err){ alert('CSV export failed: '+err); }
+        a.href = url; a.download = 'battery_history.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        document.body.classList.remove('loading');
+        showNotification('CSV exported successfully');
+      } catch(err){ 
+        document.body.classList.remove('loading');
+        showNotification('CSV export failed: ' + err.message, 'error'); 
+      }
     });
+
+    // Initialize gauges with default values
+    updateGauge('b1GaugeFill', 12.0);
+    updateGauge('b2GaugeFill', 11.8);
+    updateGauge('loadGaugeFill', 12.2);
 
   </script>
 </body>
