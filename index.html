@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Battery Changeover Dashboard</title>
+  <style>
+    body { font-family: Inter, system-ui, Arial; max-width:1000px; margin:24px auto; padding:12px; color:#111 }
+    header{display:flex;align-items:center;justify-content:space-between}
+    h1{font-size:1.25rem;margin:0}
+    .card{border:1px solid #e3e3e3;border-radius:8px;padding:12px;margin:12px 0;box-shadow:0 2px 6px rgba(0,0,0,0.03)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .big {font-size:1.4rem;font-weight:600}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:0.95rem}
+    th{background:#fafafa;font-weight:700}
+    .status {padding:6px 10px;border-radius:6px;display:inline-block}
+    .ok{background:#e6ffed;color:#0a8f3b}
+    .warn{background:#fff8e6;color:#9a6b00}
+    .err{background:#ffecec;color:#b32a2a}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #ccc;background:white;cursor:pointer}
+    .small{font-size:0.9rem;color:#666}
+    @media (max-width:720px){ .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🔋 Battery Changeover — Live Dashboard</h1>
+  <div class="controls">
+    <button id="refreshBtn">Refresh</button>
+    <button id="downloadCsv">Download History CSV</button>
+  </div>
+</header>
+
+<section class="card">
+  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <div>
+      <div class="small">Active Battery</div>
+      <div id="activeBattery" class="big">—</div>
+      <div id="systemStatus" class="small">Status: —</div>
+    </div>
+
+    <div style="flex:1">
+      <div class="grid">
+        <div class="card">
+          <div class="small">Battery 1</div>
+          <div id="b1volt" class="big">— V</div>
+          <div id="b1temp" class="small">— °C</div>
+        </div>
+        <div class="card">
+          <div class="small">Battery 2</div>
+          <div id="b2volt" class="big">— V</div>
+          <div id="b2temp" class="small">— °C</div>
+        </div>
+        <div class="card">
+          <div class="small">Load</div>
+          <div id="loadvolt" class="big">— V</div>
+          <div id="lastSeen" class="small">Last update: —</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h3 style="margin:0 0 8px 0">Changeover History</h3>
+  <div class="small" style="margin-bottom:8px">Entries are added when the active battery changes (or when device pushes a history record).</div>
+  <div style="max-height:420px;overflow:auto">
+    <table id="historyTable">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>ActiveBattery</th>
+          <th>Bat1_V (V)</th>
+          <th>Bat2_V (V)</th>
+          <th>Load_V (V)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="small" style="margin-top:8px;color:#666">
+  <div>DB URL: <span id="dbUrl"></span></div>
+  <div style="margin-top:6px">Make sure your Realtime DB read rules are open for this client, or add authentication to the web app.</div>
+</footer>
+
+<!-- Firebase v9 modular SDK -->
+<script type="module">
+  // --- Firebase config (from your project) ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyAPgh051TeLWe6SPtVhk_A241addyIyfUM",
+    authDomain: "lithium-ion-battery-changeover.firebaseapp.com",
+    databaseURL: "https://lithium-ion-battery-changeover-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "lithium-ion-battery-changeover",
+    storageBucket: "lithium-ion-battery-changeover.firebasestorage.app",
+    messagingSenderId: "186918574175",
+    appId: "1:186918574175:web:942c0ba9fb678c447ce3ea"
+  };
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import {
+    getDatabase, ref, onValue, get, child, query, orderByKey, limitToLast, onChildAdded
+  } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // UI references
+  const b1voltEl = document.getElementById('b1volt');
+  const b1tempEl = document.getElementById('b1temp');
+  const b2voltEl = document.getElementById('b2volt');
+  const b2tempEl = document.getElementById('b2temp');
+  const loadvoltEl = document.getElementById('loadvolt');
+  const activeEl = document.getElementById('activeBattery');
+  const statusEl = document.getElementById('systemStatus');
+  const lastSeenEl = document.getElementById('lastSeen');
+  const historyTbody = document.querySelector('#historyTable tbody');
+  document.getElementById('dbUrl').textContent = firebaseConfig.databaseURL;
+
+  // helper: convert millis key to readable time
+  function millisKeyToTime(k) {
+    // if key is numeric millis, convert; else try parseInt
+    const n = parseInt(k);
+    if (!isNaN(n) && n > 1000) {
+      const d = new Date(n);
+      return d.toLocaleString();
+    }
+    // fallback: return key
+    return k;
+  }
+
+  // Listen live to main nodes
+  const b1Ref = ref(db, '/Battery1');
+  const b2Ref = ref(db, '/Battery2');
+  const loadRef = ref(db, '/Load');
+  const sysRef = ref(db, '/System');
+
+  onValue(b1Ref, (snap) => {
+    const v = snap.val() || {};
+    if (v.Voltage !== undefined) b1voltEl.textContent = parseFloat(v.Voltage).toFixed(2) + ' V';
+    if (v.Temperature !== undefined) b1tempEl.textContent = parseFloat(v.Temperature).toFixed(1) + ' °C';
+    lastSeenEl.textContent = 'Last update: ' + new Date().toLocaleString();
+  });
+
+  onValue(b2Ref, (snap) => {
+    const v = snap.val() || {};
+    if (v.Voltage !== undefined) b2voltEl.textContent = parseFloat(v.Voltage).toFixed(2) + ' V';
+    if (v.Temperature !== undefined) b2tempEl.textContent = parseFloat(v.Temperature).toFixed(1) + ' °C';
+    lastSeenEl.textContent = 'Last update: ' + new Date().toLocaleString();
+  });
+
+  onValue(loadRef, (snap) => {
+    const v = snap.val() || {};
+    if (v.Voltage !== undefined) loadvoltEl.textContent = parseFloat(v.Voltage).toFixed(2) + ' V';
+    lastSeenEl.textContent = 'Last update: ' + new Date().toLocaleString();
+  });
+
+  onValue(sysRef, (snap) => {
+    const v = snap.val() || {};
+    const st = v.Status || '—';
+    const act = v.ActiveBattery || '—';
+    statusEl.textContent = 'Status: ' + st;
+    activeEl.textContent = act;
+    // color the status
+    statusEl.className = 'small ' + (st.includes('NO SAFE') ? 'err' : (st.includes('Using') ? 'ok' : 'warn'));
+  });
+
+  // HISTORY: show last N entries and listen for new entries
+  const historyRef = ref(db, '/History');
+  // get last 200 entries to keep UI light
+  const histQuery = query(historyRef, orderByKey(), limitToLast(200));
+
+  // load existing history once
+  get(histQuery).then(snap => {
+    historyTbody.innerHTML = '';
+    const val = snap.val() || {};
+    // keys are typically millis; sort keys descending
+    const keys = Object.keys(val).sort((a,b) => parseInt(b)-parseInt(a));
+    keys.forEach(k => {
+      appendHistoryRow(k, val[k]);
+    });
+  }).catch(err => console.warn('History fetch failed', err));
+
+  // listen for new entries (child_added)
+  onChildAdded(historyRef, (snap) => {
+    const key = snap.key;
+    const data = snap.val();
+    // prepend newest on top
+    prependHistoryRow(key, data);
+  });
+
+  function appendHistoryRow(key, data) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${millisKeyToTime(key)}</td>
+                    <td>${escapeHtml(data.ActiveBattery || '')}</td>
+                    <td>${num(data.Bat1_V)}</td>
+                    <td>${num(data.Bat2_V)}</td>
+                    <td>${num(data.Load_V)}</td>
+                    <td>${escapeHtml(data.Status || '')}</td>`;
+    historyTbody.appendChild(tr);
+  }
+
+  function prependHistoryRow(key, data) {
+    // avoid duplicates if already present
+    if ([...historyTbody.querySelectorAll('tr')].some(r => r.firstChild && r.firstChild.textContent === millisKeyToTime(key))) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${millisKeyToTime(key)}</td>
+                    <td>${escapeHtml(data.ActiveBattery || '')}</td>
+                    <td>${num(data.Bat1_V)}</td>
+                    <td>${num(data.Bat2_V)}</td>
+                    <td>${num(data.Load_V)}</td>
+                    <td>${escapeHtml(data.Status || '')}</td>`;
+    historyTbody.insertBefore(tr, historyTbody.firstChild);
+    // keep table size reasonable
+    while (historyTbody.children.length > 400) historyTbody.removeChild(historyTbody.lastChild);
+  }
+
+  function num(v) { return (v === undefined || v === null) ? '—' : parseFloat(v).toFixed(2); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  // manual refresh button
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    // snapshot read
+    Promise.all([get(b1Ref), get(b2Ref), get(loadRef), get(sysRef)]).then(results => {
+      // update UI immediately using same handlers
+      results.forEach(r => { if (r.exists()) {/* onValue already updates */} });
+      alert('Refreshed (UI should already reflect live values).');
+    }).catch(e=>alert('Refresh failed: '+e));
+  });
+
+  // CSV download for history
+  document.getElementById('downloadCsv').addEventListener('click', async () => {
+    try {
+      const snap = await get(query(historyRef, orderByKey()));
+      const data = snap.val() || {};
+      const keys = Object.keys(data).sort((a,b)=>parseInt(a)-parseInt(b)); // oldest first
+      const rows = [['Time','ActiveBattery','Bat1_V','Bat2_V','Load_V','Status']];
+      keys.forEach(k=>{
+        const d = data[k]||{};
+        rows.push([millisKeyToTime(k), d.ActiveBattery||'', d.Bat1_V||'', d.Bat2_V||'', d.Load_V||'', d.Status||'']);
+      });
+      const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'history.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch(err){ alert('CSV export failed: '+err); }
+  });
+
+</script>
+</body>
+</html>
