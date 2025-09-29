@@ -3,47 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>Battery Changeover Monitor</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f7f7f7; }
-    h2 { color: #333; }
-    #status { padding: 15px; margin-bottom: 20px; background: #fff; border-radius: 8px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-    table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; 
-            overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-    th { background: #4CAF50; color: white; }
-    tr:nth-child(even) { background: #f2f2f2; }
-    canvas { background: #fff; margin: 20px 0; padding: 10px; border-radius: 8px;
-             box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-  </style>
-</head>
-<body>
-  <h2>🔋 Battery Changeover System</h2>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
-  <!-- Current Status -->
-  <div id="status">
-    <h3>Current Status</h3>
-    <p><b>Date:</b> <span id="curDate">--</span></p>
-    <p><b>Time:</b> <span id="curTime">--</span></p>
-    <p><b>Battery 1:</b> <span id="bat1v">--</span> V | <span id="bat1t">--</span> °C</p>
-    <p><b>Battery 2:</b> <span id="bat2v">--</span> V | <span id="bat2t">--</span> °C</p>
-    <p><b>Load Voltage:</b> <span id="load">--</span> V</p>
-    <p><b>Active Battery:</b> <span id="active">--</span></p>
-  </div>
-
-  <!-- Chart Section -->
-  <h3>📊 Voltage Trends</h3>
-  <canvas id="voltageChart" height="120"></canvas>
-
-  <!-- History Table -->
-  <h3>📜 History Logs</h3>
-  <div id="history"></div>
-
-  <script>
-    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyAPgh051TeLWe6SPtVhk_A241addyIyfUM",
       authDomain: "lithium-ion-battery-changeover.firebaseapp.com",
@@ -54,68 +17,47 @@
       appId: "1:186918574175:web:942c0ba9fb678c447ce3ea"
     };
 
-    // Init Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-    // Chart.js Setup
-    const ctx = document.getElementById("voltageChart").getContext("2d");
-    const voltageChart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          { label: "Battery 1 (V)", data: [], borderColor: "red", fill: false },
-          { label: "Battery 2 (V)", data: [], borderColor: "blue", fill: false },
-          { label: "Load Voltage (V)", data: [], borderColor: "green", fill: false }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: "top" } },
-        scales: {
-          x: { title: { display: true, text: "Time" } },
-          y: { title: { display: true, text: "Voltage (V)" }, min: 0, max: 15 }
-        }
-      }
-    });
+    // Current Status
+    const curDate = document.getElementById("curDate");
+    const curTime = document.getElementById("curTime");
+    const bat1v = document.getElementById("bat1v");
+    const bat1t = document.getElementById("bat1t");
+    const bat2v = document.getElementById("bat2v");
+    const bat2t = document.getElementById("bat2t");
+    const load = document.getElementById("load");
+    const active = document.getElementById("active");
 
-    // Current Status (latest entry from History)
-    db.ref("History").limitToLast(1).on("value", (snapshot) => {
+    // Latest record
+    const latestRef = query(ref(db, "History"), limitToLast(1));
+    onValue(latestRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
       const key = Object.keys(data)[0];
       const record = data[key];
 
-      document.getElementById("curDate").textContent = record.Date;
-      document.getElementById("curTime").textContent = record.Time;
-      document.getElementById("bat1v").textContent = record.Battery1.Voltage.toFixed(2);
-      document.getElementById("bat1t").textContent = record.Battery1.Temperature.toFixed(1);
-      document.getElementById("bat2v").textContent = record.Battery2.Voltage.toFixed(2);
-      document.getElementById("bat2t").textContent = record.Battery2.Temperature.toFixed(1);
-      document.getElementById("load").textContent = record.LoadVoltage.toFixed(2);
-      document.getElementById("active").textContent = record.ActiveBattery;
+      curDate.textContent = record.Date;
+      curTime.textContent = record.Time;
+      bat1v.textContent = record.Battery1.Voltage.toFixed(2);
+      bat1t.textContent = record.Battery1.Temperature.toFixed(1);
+      bat2v.textContent = record.Battery2.Voltage.toFixed(2);
+      bat2t.textContent = record.Battery2.Temperature.toFixed(1);
+      load.textContent = record.LoadVoltage.toFixed(2);
+      active.textContent = record.ActiveBattery;
     });
 
-    // History Logs + Chart Update
-    db.ref("History").on("value", (snapshot) => {
+    // History Table
+    const historyDiv = document.getElementById("history");
+    const historyRef = ref(db, "History");
+    onValue(historyRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
 
-      let html = "<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th></tr>";
-
-      const labels = [];
-      const bat1Data = [];
-      const bat2Data = [];
-      const loadData = [];
-
-      Object.keys(data).forEach((key) => {
+      let html = "<table><tr><th>Date</th><th>Time</th><th>Bat1(V)</th><th>Bat1(°C)</th><th>Bat2(V)</th><th>Bat2(°C)</th><th>Load(V)</th><th>Active</th></tr>";
+      Object.keys(data).sort().reverse().forEach((key) => {
         const r = data[key];
-        labels.push(r.Time);
-        bat1Data.push(r.Battery1.Voltage);
-        bat2Data.push(r.Battery2.Voltage);
-        loadData.push(r.LoadVoltage);
-
         html += `<tr>
           <td>${r.Date}</td>
           <td>${r.Time}</td>
@@ -127,17 +69,31 @@
           <td>${r.ActiveBattery}</td>
         </tr>`;
       });
-
       html += "</table>";
-      document.getElementById("history").innerHTML = html;
-
-      // Update Chart
-      voltageChart.data.labels = labels;
-      voltageChart.data.datasets[0].data = bat1Data;
-      voltageChart.data.datasets[1].data = bat2Data;
-      voltageChart.data.datasets[2].data = loadData;
-      voltageChart.update();
+      historyDiv.innerHTML = html;
     });
   </script>
+  <style>
+    body { font-family: Arial; margin: 20px; background: #f7f7f7; }
+    #status { padding: 15px; background: #fff; border-radius: 8px; margin-bottom: 20px; }
+    table { border-collapse: collapse; width: 100%; background: #fff; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background: #4CAF50; color: white; }
+    tr:nth-child(even){ background: #f2f2f2; }
+  </style>
+</head>
+<body>
+  <h2>Battery Changeover Monitor</h2>
+  <div id="status">
+    <h3>Current Status</h3>
+    <p><b>Date:</b> <span id="curDate">--</span></p>
+    <p><b>Time:</b> <span id="curTime">--</span></p>
+    <p><b>Battery 1:</b> <span id="bat1v">--</span> V | <span id="bat1t">--</span> °C</p>
+    <p><b>Battery 2:</b> <span id="bat2v">--</span> V | <span id="bat2t">--</span> °C</p>
+    <p><b>Load Voltage:</b> <span id="load">--</span> V</p>
+    <p><b>Active Battery:</b> <span id="active">--</span></p>
+  </div>
+  <h3>History Logs</h3>
+  <div id="history"></div>
 </body>
 </html>
