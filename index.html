@@ -515,15 +515,23 @@
       }
     }
 
-    // helper: convert millis key to readable time
+    // Fixed timestamp conversion function
     function millisKeyToTime(k) {
-      // if key is numeric millis, convert; else try parseInt
       const n = parseInt(k);
-      if (!isNaN(n) && n > 1000) {
-        const d = new Date(n);
+      if (!isNaN(n)) {
+        // Check if the timestamp is in seconds (likely < 2,000,000,000) or milliseconds
+        const timestamp = n < 2000000000 ? n * 1000 : n;
+        const d = new Date(timestamp);
+        
+        // Check if date is valid
+        if (isNaN(d.getTime())) {
+          return k; // Return original key if invalid date
+        }
+        
+        // Return formatted date and time
         return d.toLocaleString();
       }
-      // fallback: return key
+      // Return original key if not a number
       return k;
     }
 
