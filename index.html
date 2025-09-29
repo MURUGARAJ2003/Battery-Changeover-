@@ -5,42 +5,19 @@
   <title>Battery Changeover Monitor</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f7f7f7;
-    }
-    h2 {
-      color: #333;
-    }
-    #status {
-      padding: 15px;
-      margin-bottom: 20px;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 10px;
-      text-align: center;
-    }
-    th {
-      background: #4CAF50;
-      color: white;
-    }
-    tr:nth-child(even) {
-      background: #f2f2f2;
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f7f7f7; }
+    h2 { color: #333; }
+    #status { padding: 15px; margin-bottom: 20px; background: #fff; border-radius: 8px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; 
+            overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #4CAF50; color: white; }
+    tr:nth-child(even) { background: #f2f2f2; }
+    canvas { background: #fff; margin: 20px 0; padding: 10px; border-radius: 8px;
+             box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
   </style>
 </head>
 <body>
@@ -57,7 +34,11 @@
     <p><b>Active Battery:</b> <span id="active">--</span></p>
   </div>
 
-  <!-- History -->
+  <!-- Chart Section -->
+  <h3>📊 Voltage Trends</h3>
+  <canvas id="voltageChart" height="120"></canvas>
+
+  <!-- History Table -->
   <h3>📜 History Logs</h3>
   <div id="history"></div>
 
@@ -77,6 +58,28 @@
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // Chart.js Setup
+    const ctx = document.getElementById("voltageChart").getContext("2d");
+    const voltageChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "Battery 1 (V)", data: [], borderColor: "red", fill: false },
+          { label: "Battery 2 (V)", data: [], borderColor: "blue", fill: false },
+          { label: "Load Voltage (V)", data: [], borderColor: "green", fill: false }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "top" } },
+        scales: {
+          x: { title: { display: true, text: "Time" } },
+          y: { title: { display: true, text: "Voltage (V)" }, min: 0, max: 15 }
+        }
+      }
+    });
+
     // Current Status (latest entry from History)
     db.ref("History").limitToLast(1).on("value", (snapshot) => {
       const data = snapshot.val();
@@ -94,14 +97,25 @@
       document.getElementById("active").textContent = record.ActiveBattery;
     });
 
-    // History Logs
+    // History Logs + Chart Update
     db.ref("History").on("value", (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
 
       let html = "<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th></tr>";
-      Object.keys(data).reverse().forEach((key) => {
+
+      const labels = [];
+      const bat1Data = [];
+      const bat2Data = [];
+      const loadData = [];
+
+      Object.keys(data).forEach((key) => {
         const r = data[key];
+        labels.push(r.Time);
+        bat1Data.push(r.Battery1.Voltage);
+        bat2Data.push(r.Battery2.Voltage);
+        loadData.push(r.LoadVoltage);
+
         html += `<tr>
           <td>${r.Date}</td>
           <td>${r.Time}</td>
@@ -113,8 +127,16 @@
           <td>${r.ActiveBattery}</td>
         </tr>`;
       });
+
       html += "</table>";
       document.getElementById("history").innerHTML = html;
+
+      // Update Chart
+      voltageChart.data.labels = labels;
+      voltageChart.data.datasets[0].data = bat1Data;
+      voltageChart.data.datasets[1].data = bat2Data;
+      voltageChart.data.datasets[2].data = loadData;
+      voltageChart.update();
     });
   </script>
 </body>
