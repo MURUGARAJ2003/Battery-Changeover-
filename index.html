@@ -55,10 +55,6 @@
       gap: 10px;
     }
     
-    h1 i {
-      color: var(--primary);
-    }
-    
     .subtitle {
       color: var(--gray);
       font-size: 1.1rem;
@@ -82,12 +78,6 @@
       border-radius: 12px;
       padding: 20px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-    
-    .card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 8px 16px rgba(0,0,0,0.15);
     }
     
     .card-header {
@@ -130,7 +120,6 @@
     .status-value {
       font-size: 1.4rem;
       font-weight: 600;
-      color: var(--dark);
     }
     
     .voltage-good {
@@ -165,9 +154,6 @@
       margin-bottom: 15px;
       padding-bottom: 8px;
       border-bottom: 2px solid var(--primary-light);
-      display: flex;
-      align-items: center;
-      gap: 10px;
     }
     
     table {
@@ -195,17 +181,6 @@
       background: rgba(0,0,0,0.02);
     }
     
-    tr:hover {
-      background: rgba(0,0,0,0.05);
-    }
-    
-    .fault-reason {
-      max-width: 200px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    
     .no-data {
       text-align: center;
       padding: 20px;
@@ -214,14 +189,8 @@
     }
     
     .last-updated {
-      text-align: center;
-      margin-top: 20px;
       color: var(--gray);
       font-size: 0.9rem;
-    }
-    
-    .battery-icon {
-      font-size: 1.5rem;
     }
     
     .debug-panel {
@@ -229,7 +198,7 @@
       border: 1px solid #dee2e6;
       border-radius: 8px;
       padding: 15px;
-      margin-top: 20px;
+      margin-bottom: 20px;
     }
     
     .debug-title {
@@ -246,6 +215,13 @@
       font-size: 0.85rem;
       max-height: 200px;
       overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    
+    .debug-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
     }
     
     .debug-button {
@@ -255,41 +231,67 @@
       padding: 8px 15px;
       border-radius: 4px;
       cursor: pointer;
-      margin-top: 10px;
     }
     
     .debug-button:hover {
       background: #5a6268;
     }
     
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.7; }
-      100% { opacity: 1; }
+    .connection-status {
+      padding: 8px 15px;
+      border-radius: 20px;
+      font-weight: 600;
+      text-align: center;
+      margin-top: 10px;
     }
     
-    .pulse {
-      animation: pulse 2s infinite;
+    .connected {
+      background: #4CAF50;
+      color: white;
+    }
+    
+    .disconnected {
+      background: #F44336;
+      color: white;
+    }
+    
+    .loading {
+      background: #FF9800;
+      color: white;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1><span class="battery-icon">🔋</span> Battery Changeover System</h1>
+      <h1>🔋 Battery Changeover System</h1>
       <p class="subtitle">Real-time monitoring of lithium-ion battery status and automatic changeover</p>
     </header>
+    
+    <!-- Debug Panel -->
+    <div class="debug-panel">
+      <div class="debug-title">Firebase Diagnostic Panel</div>
+      <div class="debug-content" id="debugOutput">
+        Initializing Firebase connection...
+      </div>
+      <div class="debug-buttons">
+        <button class="debug-button" onclick="checkRoot()">Check Database Root</button>
+        <button class="debug-button" onclick="checkHistory()">Check History Data</button>
+        <button class="debug-button" onclick="checkFaults()">Check Fault Logs</button>
+        <button class="debug-button" onclick="clearDebug()">Clear Debug</button>
+      </div>
+    </div>
     
     <div class="dashboard">
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title"><span class="battery-icon">📊</span> Current Status</h2>
+          <h2 class="card-title">📊 Current Status</h2>
           <div class="last-updated" id="lastUpdated">Last updated: --</div>
         </div>
         <div class="status-grid">
           <div class="status-item">
             <span class="status-label">Battery 1 Voltage</span>
-            <span class="status-value voltage-good" id="bat1v">--</span>
+            <span class="status-value" id="bat1v">--</span>
           </div>
           <div class="status-item">
             <span class="status-label">Battery 1 Temperature</span>
@@ -297,7 +299,7 @@
           </div>
           <div class="status-item">
             <span class="status-label">Battery 2 Voltage</span>
-            <span class="status-value voltage-good" id="bat2v">--</span>
+            <span class="status-value" id="bat2v">--</span>
           </div>
           <div class="status-item">
             <span class="status-label">Battery 2 Temperature</span>
@@ -305,7 +307,7 @@
           </div>
           <div class="status-item" style="grid-column: 1 / -1;">
             <span class="status-label">Load Voltage</span>
-            <span class="status-value voltage-good" id="load">--</span>
+            <span class="status-value" id="load">--</span>
           </div>
         </div>
         <div class="active-battery" id="active">Active: --</div>
@@ -313,7 +315,7 @@
       
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title"><span>📅</span> System Info</h2>
+          <h2 class="card-title">📅 System Info</h2>
         </div>
         <div class="status-grid">
           <div class="status-item">
@@ -326,50 +328,39 @@
           </div>
           <div class="status-item" style="grid-column: 1 / -1;">
             <span class="status-label">System Status</span>
-            <span class="status-value voltage-good" id="systemStatus">Operational</span>
+            <span class="status-value" id="systemStatus">--</span>
           </div>
         </div>
-        <div class="active-battery pulse" style="background: #2196F3;">
-          <span id="connectionStatus">Connected to Firebase</span>
+        <div class="connection-status loading" id="connectionStatus">
+          Connecting to Firebase...
         </div>
       </div>
-    </div>
-    
-    <!-- Debug Panel -->
-    <div class="debug-panel">
-      <div class="debug-title">Debug Information</div>
-      <div class="debug-content" id="debugOutput">
-        No debug information available. Click "Check Database" to see what's in Firebase.
-      </div>
-      <button class="debug-button" onclick="checkDatabase()">Check Database</button>
-      <button class="debug-button" onclick="checkFirebaseConnection()">Test Firebase Connection</button>
     </div>
     
     <div class="section">
-      <h2 class="section-title"><span>📜</span> History Logs</h2>
+      <h2 class="section-title">📜 History Logs</h2>
       <div id="history" class="no-data">Loading history data...</div>
     </div>
     
     <div class="section">
-      <h2 class="section-title"><span>⚠️</span> Fault Logs</h2>
+      <h2 class="section-title">⚠️ Fault Logs</h2>
       <div id="faults" class="no-data">No faults detected</div>
     </div>
   </div>
 
   <script type="module">
-    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
     import { 
       getDatabase, 
       ref, 
       onValue, 
+      onDisconnect,
       query, 
       limitToLast,
-      onDisconnect,
-      serverTimestamp 
+      orderByKey
     } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
 
-    // Your web app's Firebase configuration
+    // Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyAPgh051TeLWe6SPtVhk_A241addyIyfUM",
       authDomain: "lithium-ion-battery-changeover.firebaseapp.com",
@@ -380,11 +371,8 @@
       appId: "1:186918574175:web:942c0ba9fb678c447ce3ea"
     };
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-
     // DOM elements
+    const debugOutput = document.getElementById("debugOutput");
     const curDate = document.getElementById("curDate");
     const curTime = document.getElementById("curTime");
     const bat1v = document.getElementById("bat1v");
@@ -398,73 +386,63 @@
     const lastUpdated = document.getElementById("lastUpdated");
     const systemStatus = document.getElementById("systemStatus");
     const connectionStatus = document.getElementById("connectionStatus");
-    const debugOutput = document.getElementById("debugOutput");
 
-    // Global variables for Firebase references
-    let latestRef, historyRef, faultRef;
+    let app, database;
 
-    // Debug function to check database structure
-    window.checkDatabase = function() {
-      debugOutput.textContent = "Checking database structure...";
-      
-      // Check root nodes
+    // Debug functions
+    window.checkRoot = function() {
+      debugOutput.textContent = "Checking database root...";
       const rootRef = ref(database, '/');
       onValue(rootRef, (snapshot) => {
         const data = snapshot.val();
-        debugOutput.textContent = "Database root nodes:\n" + JSON.stringify(data, null, 2);
+        debugOutput.textContent = "Database Root:\n" + JSON.stringify(data, null, 2);
       }, (error) => {
-        debugOutput.textContent = "Error accessing database: " + error.message;
+        debugOutput.textContent = "Error reading root: " + error.message;
       });
     };
 
-    // Test Firebase connection
-    window.checkFirebaseConnection = function() {
-      debugOutput.textContent = "Testing Firebase connection...";
-      
-      const connectedRef = ref(database, '.info/connected');
-      onValue(connectedRef, (snapshot) => {
-        if (snapshot.val() === true) {
-          debugOutput.textContent = "Firebase connection successful!";
+    window.checkHistory = function() {
+      debugOutput.textContent = "Checking History node...";
+      const historyRef = ref(database, 'History');
+      onValue(historyRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const keys = Object.keys(data);
+          debugOutput.textContent = `History node found with ${keys.length} records.\nLast 3 keys: ${keys.slice(-3).join(', ')}`;
         } else {
-          debugOutput.textContent = "Firebase connection failed!";
+          debugOutput.textContent = "No data found in History node";
         }
       }, (error) => {
-        debugOutput.textContent = "Firebase connection error: " + error.message;
+        debugOutput.textContent = "Error reading History: " + error.message;
       });
     };
 
-    // Update last updated timestamp
+    window.checkFaults = function() {
+      debugOutput.textContent = "Checking FaultLogs node...";
+      const faultRef = ref(database, 'FaultLogs');
+      onValue(faultRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const keys = Object.keys(data);
+          debugOutput.textContent = `FaultLogs node found with ${keys.length} records.`;
+        } else {
+          debugOutput.textContent = "No data found in FaultLogs node";
+        }
+      }, (error) => {
+        debugOutput.textContent = "Error reading FaultLogs: " + error.message;
+      });
+    };
+
+    window.clearDebug = function() {
+      debugOutput.textContent = "Debug cleared";
+    };
+
+    // Update display functions
     function updateLastUpdated() {
       const now = new Date();
       lastUpdated.textContent = `Last updated: ${now.toLocaleTimeString()}`;
     }
 
-    // Format date from Firebase key
-    function formatDateFromKey(key) {
-      try {
-        // Key format: "YYYY-M-D_HH:MM:SS"
-        const [datePart, timePart] = key.split('_');
-        const [year, month, day] = datePart.split('-');
-        
-        // Format date as DD/MM/YYYY
-        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
-      } catch (e) {
-        return 'Invalid Date';
-      }
-    }
-
-    // Format time from Firebase key
-    function formatTimeFromKey(key) {
-      try {
-        // Key format: "YYYY-M-D_HH:MM:SS"
-        const parts = key.split('_');
-        return parts.length > 1 ? parts[1] : 'Invalid Time';
-      } catch (e) {
-        return 'Invalid Time';
-      }
-    }
-
-    // Update voltage color based on value
     function updateVoltageColor(element, voltage) {
       element.classList.remove('voltage-good', 'voltage-warning', 'voltage-danger');
       
@@ -477,176 +455,195 @@
       }
     }
 
-    // Initialize Firebase listeners
-    function initializeFirebaseListeners() {
-      // ---------------- Current Status ----------------
-      latestRef = query(ref(database, 'History'), limitToLast(1));
+    function updateConnectionStatus(connected) {
+      connectionStatus.textContent = connected ? 
+        "Connected to Firebase" : "Disconnected from Firebase";
+      connectionStatus.className = connected ? 
+        "connection-status connected" : "connection-status disconnected";
+    }
+
+    // Initialize Firebase and set up listeners
+    function initializeApp() {
+      try {
+        debugOutput.textContent = "Initializing Firebase...";
+        app = initializeApp(firebaseConfig);
+        database = getDatabase(app);
+        
+        debugOutput.textContent += "\nFirebase initialized successfully!";
+        
+        // Set up connection monitoring
+        const connectedRef = ref(database, '.info/connected');
+        onValue(connectedRef, (snapshot) => {
+          updateConnectionStatus(snapshot.val() === true);
+        });
+
+        // Set up data listeners
+        setupDataListeners();
+        
+      } catch (error) {
+        debugOutput.textContent = "Firebase initialization error: " + error.message;
+        updateConnectionStatus(false);
+      }
+    }
+
+    function setupDataListeners() {
+      debugOutput.textContent += "\nSetting up data listeners...";
+      
+      // Listen for latest data
+      const latestRef = query(ref(database, 'History'), limitToLast(1));
       onValue(latestRef, (snapshot) => {
         const data = snapshot.val();
-        if (!data) {
-          console.log("No data found in History node");
-          debugOutput.textContent = "No data found in History node";
-          return;
-        }
-        
-        const key = Object.keys(data)[0];
-        const record = data[key];
-        
-        console.log("Latest record:", record);
-        
-        // Update current status with fallbacks for different field name possibilities
-        curDate.textContent = record.Date || record.date || formatDateFromKey(key);
-        curTime.textContent = record.Time || record.time || formatTimeFromKey(key);
-        
-        // Handle different possible field structures
-        const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
-        const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
-        const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
-        const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
-        const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
-        const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
-        
-        bat1v.textContent = bat1Voltage ? bat1Voltage.toFixed(2) : '--';
-        bat1t.textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
-        bat2v.textContent = bat2Voltage ? bat2Voltage.toFixed(2) : '--';
-        bat2t.textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
-        loadV.textContent = loadVoltage ? loadVoltage.toFixed(2) : '--';
-        active.textContent = 'Active: ' + (activeBattery || '--');
-        
-        // Update voltage colors
-        if (bat1Voltage) updateVoltageColor(bat1v, bat1Voltage);
-        if (bat2Voltage) updateVoltageColor(bat2v, bat2Voltage);
-        if (loadVoltage) updateVoltageColor(loadV, loadVoltage);
-        
-        // Update system status
-        if (activeBattery === "No Safe Battery" || activeBattery === "none") {
-          systemStatus.textContent = "Critical";
-          systemStatus.classList.remove('voltage-good', 'voltage-warning');
-          systemStatus.classList.add('voltage-danger');
-        } else if (activeBattery && activeBattery !== "None" && activeBattery !== "none") {
-          systemStatus.textContent = "Operational";
-          systemStatus.classList.remove('voltage-warning', 'voltage-danger');
-          systemStatus.classList.add('voltage-good');
+        if (data) {
+          const key = Object.keys(data)[0];
+          const record = data[key];
+          
+          debugOutput.textContent = `Latest data received: ${key}`;
+          
+          // Extract data with multiple fallback options
+          const bat1Voltage = getNestedValue(record, ['Battery1', 'Voltage'], ['bat1v'], ['battery1Voltage']);
+          const bat1Temp = getNestedValue(record, ['Battery1', 'Temperature'], ['bat1t'], ['battery1Temp']);
+          const bat2Voltage = getNestedValue(record, ['Battery2', 'Voltage'], ['bat2v'], ['battery2Voltage']);
+          const bat2Temp = getNestedValue(record, ['Battery2', 'Temperature'], ['bat2t'], ['battery2Temp']);
+          const loadVoltage = getNestedValue(record, ['LoadVoltage'], ['loadv'], ['loadVoltage']);
+          const activeBattery = getNestedValue(record, ['ActiveBattery'], ['active'], ['activeBattery']);
+          
+          // Update display
+          bat1v.textContent = bat1Voltage ? bat1Voltage.toFixed(2) + 'V' : '--';
+          bat1t.textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
+          bat2v.textContent = bat2Voltage ? bat2Voltage.toFixed(2) + 'V' : '--';
+          bat2t.textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
+          loadV.textContent = loadVoltage ? loadVoltage.toFixed(2) + 'V' : '--';
+          active.textContent = 'Active: ' + (activeBattery || '--');
+          
+          // Update colors
+          if (bat1Voltage) updateVoltageColor(bat1v, bat1Voltage);
+          if (bat2Voltage) updateVoltageColor(bat2v, bat2Voltage);
+          if (loadVoltage) updateVoltageColor(loadV, loadVoltage);
+          
+          // Update system status
+          if (activeBattery === "No Safe Battery") {
+            systemStatus.textContent = "Critical";
+            systemStatus.className = "status-value voltage-danger";
+          } else if (activeBattery && activeBattery !== "None") {
+            systemStatus.textContent = "Operational";
+            systemStatus.className = "status-value voltage-good";
+          } else {
+            systemStatus.textContent = "Unknown";
+            systemStatus.className = "status-value voltage-warning";
+          }
+          
+          updateLastUpdated();
         } else {
-          systemStatus.textContent = "Unknown";
-          systemStatus.classList.remove('voltage-good', 'voltage-danger');
-          systemStatus.classList.add('voltage-warning');
+          debugOutput.textContent = "No data found in History node";
         }
-        
-        updateLastUpdated();
       }, (error) => {
-        console.error("Error reading History:", error);
-        debugOutput.textContent = "Error reading History: " + error.message;
+        debugOutput.textContent = "Error reading latest data: " + error.message;
       });
 
-      // ---------------- History Table ----------------
-      historyRef = ref(database, 'History');
+      // Listen for all history data
+      const historyRef = ref(database, 'History');
       onValue(historyRef, (snapshot) => {
         const data = snapshot.val();
-        if (!data) {
-          historyDiv.innerHTML = '<div class="no-data">No history data available</div>';
-          return;
+        if (data) {
+          const keys = Object.keys(data).sort().reverse().slice(0, 20); // Last 20 records
+          
+          let html = '<table><tr><th>Date/Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th></tr>';
+          
+          keys.forEach((key) => {
+            const r = data[key];
+            const bat1Voltage = getNestedValue(r, ['Battery1', 'Voltage'], ['bat1v']);
+            const bat1Temp = getNestedValue(r, ['Battery1', 'Temperature'], ['bat1t']);
+            const bat2Voltage = getNestedValue(r, ['Battery2', 'Voltage'], ['bat2v']);
+            const bat2Temp = getNestedValue(r, ['Battery2', 'Temperature'], ['bat2t']);
+            const loadVoltage = getNestedValue(r, ['LoadVoltage'], ['loadv']);
+            const activeBattery = getNestedValue(r, ['ActiveBattery'], ['active']);
+            
+            html += `<tr>
+              <td>${key}</td>
+              <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
+              <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
+              <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
+              <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
+              <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
+              <td>${activeBattery || '--'}</td>
+            </tr>`;
+          });
+          
+          html += '</table>';
+          historyDiv.innerHTML = html;
         }
-
-        let html = '<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active Battery</th></tr>';
-        
-        Object.keys(data).sort().reverse().forEach((key) => {
-          const r = data[key];
-          
-          // Handle different possible field structures
-          const displayDate = r.Date || r.date || formatDateFromKey(key);
-          const displayTime = r.Time || r.time || formatTimeFromKey(key);
-          const bat1Voltage = r.Battery1?.Voltage || r.bat1v || r.battery1Voltage;
-          const bat1Temp = r.Battery1?.Temperature || r.bat1t || r.battery1Temp;
-          const bat2Voltage = r.Battery2?.Voltage || r.bat2v || r.battery2Voltage;
-          const bat2Temp = r.Battery2?.Temperature || r.bat2t || r.battery2Temp;
-          const loadVoltage = r.LoadVoltage || r.loadv || r.loadVoltage;
-          const activeBattery = r.ActiveBattery || r.active || r.activeBattery;
-          
-          html += `<tr>
-            <td>${displayDate}</td>
-            <td>${displayTime}</td>
-            <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
-            <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
-            <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
-            <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
-            <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
-            <td>${activeBattery || '--'}</td>
-          </tr>`;
-        });
-        
-        html += '</table>';
-        historyDiv.innerHTML = html;
-      }, (error) => {
-        console.error("Error reading History for table:", error);
-        historyDiv.innerHTML = '<div class="no-data">Error loading history: ' + error.message + '</div>';
       });
 
-      // ---------------- Fault Logs ----------------
-      faultRef = ref(database, 'FaultLogs');
+      // Listen for fault logs
+      const faultRef = ref(database, 'FaultLogs');
       onValue(faultRef, (snapshot) => {
         const data = snapshot.val();
-        if (!data) {
-          faultsDiv.innerHTML = '<div class="no-data">No faults detected</div>';
-          return;
-        }
-
-        let html = '<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th><th>Fault Reason</th></tr>';
-        
-        Object.keys(data).sort().reverse().forEach((key) => {
-          const r = data[key];
+        if (data) {
+          const keys = Object.keys(data).sort().reverse();
           
-          // Handle different possible field structures
-          const displayDate = r.Date || r.date || formatDateFromKey(key);
-          const displayTime = r.Time || r.time || formatTimeFromKey(key);
-          const bat1Voltage = r.Battery1Voltage || r.bat1v || r.Battery1?.Voltage;
-          const bat1Temp = r.Battery1Temp || r.bat1t || r.Battery1?.Temperature;
-          const bat2Voltage = r.Battery2Voltage || r.bat2v || r.Battery2?.Voltage;
-          const bat2Temp = r.Battery2Temp || r.bat2t || r.Battery2?.Temperature;
-          const loadVoltage = r.LoadVoltage || r.loadv;
-          const activeBattery = r.ActiveBattery || r.active;
-          const faultReason = r.FaultReason || r.fault || r.reason;
+          let html = '<table><tr><th>Date/Time</th><th>Bat1 (V)</th><th>Bat2 (V)</th><th>Load (V)</th><th>Active</th><th>Fault Reason</th></tr>';
           
-          html += `<tr>
-            <td>${displayDate}</td>
-            <td>${displayTime}</td>
-            <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
-            <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
-            <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
-            <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
-            <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
-            <td>${activeBattery || '--'}</td>
-            <td class="fault-reason" title="${faultReason || 'Unknown'}">${faultReason || 'Unknown'}</td>
-          </tr>`;
-        });
-        
-        html += '</table>';
-        faultsDiv.innerHTML = html;
-      }, (error) => {
-        console.error("Error reading FaultLogs:", error);
-        faultsDiv.innerHTML = '<div class="no-data">Error loading faults: ' + error.message + '</div>';
-      });
-
-      // Connection status monitoring
-      const connectedRef = ref(database, '.info/connected');
-      onValue(connectedRef, (snapshot) => {
-        if (snapshot.val() === true) {
-          connectionStatus.textContent = "Connected to Firebase";
-          connectionStatus.parentElement.style.background = "#4CAF50";
-        } else {
-          connectionStatus.textContent = "Disconnected from Firebase";
-          connectionStatus.parentElement.style.background = "#F44336";
+          keys.forEach((key) => {
+            const r = data[key];
+            const bat1Voltage = getNestedValue(r, ['Battery1Voltage'], ['bat1v']);
+            const bat2Voltage = getNestedValue(r, ['Battery2Voltage'], ['bat2v']);
+            const loadVoltage = getNestedValue(r, ['LoadVoltage'], ['loadv']);
+            const activeBattery = getNestedValue(r, ['ActiveBattery'], ['active']);
+            const faultReason = getNestedValue(r, ['FaultReason'], ['reason']);
+            
+            html += `<tr>
+              <td>${key}</td>
+              <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
+              <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
+              <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
+              <td>${activeBattery || '--'}</td>
+              <td>${faultReason || 'Unknown'}</td>
+            </tr>`;
+          });
+          
+          html += '</table>';
+          faultsDiv.innerHTML = html;
         }
       });
     }
 
-    // Initialize everything when the page loads
+    // Helper function to get nested values with fallbacks
+    function getNestedValue(obj, ...paths) {
+      for (const path of paths) {
+        let value = obj;
+        for (const key of path) {
+          if (value && typeof value === 'object' && key in value) {
+            value = value[key];
+          } else {
+            value = undefined;
+            break;
+          }
+        }
+        if (value !== undefined) return value;
+      }
+      return undefined;
+    }
+
+    // Update current date and time
+    function updateCurrentDateTime() {
+      const now = new Date();
+      curDate.textContent = now.toLocaleDateString();
+      curTime.textContent = now.toLocaleTimeString();
+    }
+
+    // Initialize when page loads
     document.addEventListener('DOMContentLoaded', function() {
-      initializeFirebaseListeners();
-      updateLastUpdated();
+      initializeApp();
+      updateCurrentDateTime();
       
-      // Check database after a short delay
-      setTimeout(checkDatabase, 2000);
+      // Update current time every second
+      setInterval(updateCurrentDateTime, 1000);
+      
+      // Check database root after a short delay
+      setTimeout(() => {
+        debugOutput.textContent += "\nAuto-checking database...";
+        window.checkRoot();
+      }, 2000);
     });
   </script>
 </body>
