@@ -49,10 +49,6 @@
     h1 {
       color: var(--primary-dark);
       margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
     
     .subtitle {
@@ -92,9 +88,6 @@
     .card-title {
       font-size: 1.3rem;
       color: var(--primary-dark);
-      display: flex;
-      align-items: center;
-      gap: 8px;
     }
     
     .status-grid {
@@ -122,17 +115,9 @@
       font-weight: 600;
     }
     
-    .voltage-good {
-      color: var(--primary);
-    }
-    
-    .voltage-warning {
-      color: var(--secondary);
-    }
-    
-    .voltage-danger {
-      color: var(--danger);
-    }
+    .voltage-good { color: var(--primary); }
+    .voltage-warning { color: var(--secondary); }
+    .voltage-danger { color: var(--danger); }
     
     .active-battery {
       background: var(--primary-light);
@@ -142,55 +127,6 @@
       font-weight: 600;
       text-align: center;
       margin-top: 10px;
-    }
-    
-    .section {
-      margin-bottom: 30px;
-    }
-    
-    .section-title {
-      font-size: 1.5rem;
-      color: var(--primary-dark);
-      margin-bottom: 15px;
-      padding-bottom: 8px;
-      border-bottom: 2px solid var(--primary-light);
-    }
-    
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    
-    th, td {
-      padding: 12px 15px;
-      text-align: center;
-      border-bottom: 1px solid var(--border);
-    }
-    
-    th {
-      background: var(--primary);
-      color: white;
-      font-weight: 600;
-    }
-    
-    tr:nth-child(even) {
-      background: rgba(0,0,0,0.02);
-    }
-    
-    .no-data {
-      text-align: center;
-      padding: 20px;
-      color: var(--gray);
-      font-style: italic;
-    }
-    
-    .last-updated {
-      color: var(--gray);
-      font-size: 0.9rem;
     }
     
     .debug-panel {
@@ -213,7 +149,7 @@
       border-radius: 4px;
       font-family: monospace;
       font-size: 0.85rem;
-      max-height: 200px;
+      max-height: 300px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
@@ -222,6 +158,7 @@
       display: flex;
       gap: 10px;
       margin-top: 10px;
+      flex-wrap: wrap;
     }
     
     .debug-button {
@@ -233,9 +170,7 @@
       cursor: pointer;
     }
     
-    .debug-button:hover {
-      background: #5a6268;
-    }
+    .debug-button:hover { background: #5a6268; }
     
     .connection-status {
       padding: 8px 15px;
@@ -245,19 +180,16 @@
       margin-top: 10px;
     }
     
-    .connected {
-      background: #4CAF50;
-      color: white;
-    }
+    .connected { background: #4CAF50; color: white; }
+    .disconnected { background: #F44336; color: white; }
+    .loading { background: #FF9800; color: white; }
     
-    .disconnected {
-      background: #F44336;
-      color: white;
-    }
-    
-    .loading {
-      background: #FF9800;
-      color: white;
+    .test-data {
+      background: #e3f2fd;
+      border: 1px solid #2196F3;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 20px;
     }
   </style>
 </head>
@@ -272,21 +204,23 @@
     <div class="debug-panel">
       <div class="debug-title">Firebase Diagnostic Panel</div>
       <div class="debug-content" id="debugOutput">
-        Initializing Firebase connection...
+        Starting Firebase initialization...
       </div>
       <div class="debug-buttons">
         <button class="debug-button" onclick="checkRoot()">Check Database Root</button>
-        <button class="debug-button" onclick="checkHistory()">Check History Data</button>
-        <button class="debug-button" onclick="checkFaults()">Check Fault Logs</button>
+        <button class="debug-button" onclick="checkHistory()">Check History</button>
+        <button class="debug-button" onclick="checkFaults()">Check FaultLogs</button>
+        <button class="debug-button" onclick="checkConnection()">Check Connection</button>
+        <button class="debug-button" onclick="testWrite()">Test Write Data</button>
         <button class="debug-button" onclick="clearDebug()">Clear Debug</button>
       </div>
     </div>
-    
+
     <div class="dashboard">
       <div class="card">
         <div class="card-header">
           <h2 class="card-title">📊 Current Status</h2>
-          <div class="last-updated" id="lastUpdated">Last updated: --</div>
+          <div id="lastUpdated">Last updated: --</div>
         </div>
         <div class="status-grid">
           <div class="status-item">
@@ -336,30 +270,18 @@
         </div>
       </div>
     </div>
-    
-    <div class="section">
-      <h2 class="section-title">📜 History Logs</h2>
-      <div id="history" class="no-data">Loading history data...</div>
-    </div>
-    
-    <div class="section">
-      <h2 class="section-title">⚠️ Fault Logs</h2>
-      <div id="faults" class="no-data">No faults detected</div>
+
+    <div class="test-data">
+      <h3>Database Status</h3>
+      <p id="dbStatus">Checking database...</p>
+      <div id="testResults"></div>
     </div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { 
-      getDatabase, 
-      ref, 
-      onValue, 
-      onDisconnect,
-      query, 
-      limitToLast,
-      orderByKey
-    } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
-
+  <!-- Using Compat version for broader compatibility -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script>
     // Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyAPgh051TeLWe6SPtVhk_A241addyIyfUM",
@@ -373,277 +295,247 @@
 
     // DOM elements
     const debugOutput = document.getElementById("debugOutput");
-    const curDate = document.getElementById("curDate");
-    const curTime = document.getElementById("curTime");
-    const bat1v = document.getElementById("bat1v");
-    const bat1t = document.getElementById("bat1t");
-    const bat2v = document.getElementById("bat2v");
-    const bat2t = document.getElementById("bat2t");
-    const loadV = document.getElementById("load");
-    const active = document.getElementById("active");
-    const historyDiv = document.getElementById("history");
-    const faultsDiv = document.getElementById("faults");
-    const lastUpdated = document.getElementById("lastUpdated");
-    const systemStatus = document.getElementById("systemStatus");
+    const dbStatus = document.getElementById("dbStatus");
+    const testResults = document.getElementById("testResults");
     const connectionStatus = document.getElementById("connectionStatus");
 
+    // Global variables
     let app, database;
 
     // Debug functions
+    function logDebug(message) {
+      debugOutput.textContent += `\n${new Date().toLocaleTimeString()}: ${message}`;
+      debugOutput.scrollTop = debugOutput.scrollHeight;
+      console.log(message);
+    }
+
     window.checkRoot = function() {
-      debugOutput.textContent = "Checking database root...";
-      const rootRef = ref(database, '/');
-      onValue(rootRef, (snapshot) => {
-        const data = snapshot.val();
-        debugOutput.textContent = "Database Root:\n" + JSON.stringify(data, null, 2);
-      }, (error) => {
-        debugOutput.textContent = "Error reading root: " + error.message;
-      });
+      logDebug("Checking database root...");
+      const rootRef = firebase.database().ref('/');
+      rootRef.once('value')
+        .then((snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            logDebug("Database root found. Keys: " + Object.keys(data).join(', '));
+            logDebug("Full structure: " + JSON.stringify(data, null, 2));
+          } else {
+            logDebug("Database root is empty - no data found");
+          }
+        })
+        .catch((error) => {
+          logDebug("Error reading root: " + error.message);
+        });
     };
 
     window.checkHistory = function() {
-      debugOutput.textContent = "Checking History node...";
-      const historyRef = ref(database, 'History');
-      onValue(historyRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const keys = Object.keys(data);
-          debugOutput.textContent = `History node found with ${keys.length} records.\nLast 3 keys: ${keys.slice(-3).join(', ')}`;
-        } else {
-          debugOutput.textContent = "No data found in History node";
-        }
-      }, (error) => {
-        debugOutput.textContent = "Error reading History: " + error.message;
-      });
+      logDebug("Checking History node...");
+      const historyRef = firebase.database().ref('History');
+      historyRef.once('value')
+        .then((snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            const keys = Object.keys(data);
+            logDebug(`History node found with ${keys.length} records`);
+            if (keys.length > 0) {
+              const latestKey = keys[keys.length - 1];
+              logDebug(`Latest record (${latestKey}): ${JSON.stringify(data[latestKey])}`);
+            }
+          } else {
+            logDebug("No data found in History node");
+          }
+        })
+        .catch((error) => {
+          logDebug("Error reading History: " + error.message);
+        });
     };
 
     window.checkFaults = function() {
-      debugOutput.textContent = "Checking FaultLogs node...";
-      const faultRef = ref(database, 'FaultLogs');
-      onValue(faultRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const keys = Object.keys(data);
-          debugOutput.textContent = `FaultLogs node found with ${keys.length} records.`;
-        } else {
-          debugOutput.textContent = "No data found in FaultLogs node";
-        }
-      }, (error) => {
-        debugOutput.textContent = "Error reading FaultLogs: " + error.message;
-      });
+      logDebug("Checking FaultLogs node...");
+      const faultRef = firebase.database().ref('FaultLogs');
+      faultRef.once('value')
+        .then((snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            const keys = Object.keys(data);
+            logDebug(`FaultLogs node found with ${keys.length} records`);
+          } else {
+            logDebug("No data found in FaultLogs node");
+          }
+        })
+        .catch((error) => {
+          logDebug("Error reading FaultLogs: " + error.message);
+        });
+    };
+
+    window.checkConnection = function() {
+      logDebug("Checking Firebase connection...");
+      const connectedRef = firebase.database().ref('.info/connected');
+      connectedRef.once('value')
+        .then((snapshot) => {
+          logDebug("Connection state: " + (snapshot.val() ? "Connected" : "Disconnected"));
+        })
+        .catch((error) => {
+          logDebug("Error checking connection: " + error.message);
+        });
+    };
+
+    window.testWrite = function() {
+      logDebug("Testing write operation...");
+      const testRef = firebase.database().ref('test');
+      const testData = {
+        timestamp: new Date().toISOString(),
+        message: "Test write from web dashboard"
+      };
+      
+      testRef.set(testData)
+        .then(() => {
+          logDebug("Write test successful");
+          // Read it back to confirm
+          testRef.once('value')
+            .then((snapshot) => {
+              logDebug("Read back: " + JSON.stringify(snapshot.val()));
+              // Clean up
+              testRef.remove();
+            });
+        })
+        .catch((error) => {
+          logDebug("Write test failed: " + error.message);
+        });
     };
 
     window.clearDebug = function() {
-      debugOutput.textContent = "Debug cleared";
+      debugOutput.textContent = "Debug log cleared";
     };
 
-    // Update display functions
-    function updateLastUpdated() {
-      const now = new Date();
-      lastUpdated.textContent = `Last updated: ${now.toLocaleTimeString()}`;
-    }
-
-    function updateVoltageColor(element, voltage) {
-      element.classList.remove('voltage-good', 'voltage-warning', 'voltage-danger');
-      
-      if (voltage >= 10.5) {
-        element.classList.add('voltage-good');
-      } else if (voltage >= 9.0) {
-        element.classList.add('voltage-warning');
-      } else {
-        element.classList.add('voltage-danger');
-      }
-    }
-
-    function updateConnectionStatus(connected) {
-      connectionStatus.textContent = connected ? 
-        "Connected to Firebase" : "Disconnected from Firebase";
-      connectionStatus.className = connected ? 
-        "connection-status connected" : "connection-status disconnected";
-    }
-
-    // Initialize Firebase and set up listeners
-    function initializeApp() {
+    // Initialize Firebase
+    function initializeFirebase() {
       try {
-        debugOutput.textContent = "Initializing Firebase...";
-        app = initializeApp(firebaseConfig);
-        database = getDatabase(app);
+        logDebug("Initializing Firebase...");
+        app = firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
         
-        debugOutput.textContent += "\nFirebase initialized successfully!";
+        logDebug("Firebase initialized, setting up connection listener...");
         
-        // Set up connection monitoring
-        const connectedRef = ref(database, '.info/connected');
-        onValue(connectedRef, (snapshot) => {
-          updateConnectionStatus(snapshot.val() === true);
+        // Monitor connection state
+        const connectedRef = firebase.database().ref('.info/connected');
+        connectedRef.on('value', (snapshot) => {
+          const connected = snapshot.val() === true;
+          connectionStatus.textContent = connected ? 
+            "Connected to Firebase" : "Disconnected from Firebase";
+          connectionStatus.className = connected ? 
+            "connection-status connected" : "connection-status disconnected";
+          
+          if (connected) {
+            logDebug("Firebase connection established");
+            setupDataListeners();
+          } else {
+            logDebug("Firebase connection lost");
+          }
         });
 
-        // Set up data listeners
-        setupDataListeners();
-        
+        // Set up error handler
+        database.ref('.info/connected').on('value', () => {}, (error) => {
+          logDebug("Firebase error: " + error.message);
+        });
+
       } catch (error) {
-        debugOutput.textContent = "Firebase initialization error: " + error.message;
-        updateConnectionStatus(false);
+        logDebug("Firebase initialization failed: " + error.message);
+        connectionStatus.textContent = "Initialization Failed";
+        connectionStatus.className = "connection-status disconnected";
       }
     }
 
+    // Set up data listeners
     function setupDataListeners() {
-      debugOutput.textContent += "\nSetting up data listeners...";
+      logDebug("Setting up data listeners...");
       
-      // Listen for latest data
-      const latestRef = query(ref(database, 'History'), limitToLast(1));
-      onValue(latestRef, (snapshot) => {
+      // Test basic database access first
+      const testRef = database.ref('test');
+      testRef.set({ test: "connection_test", timestamp: Date.now() })
+        .then(() => {
+          logDebug("Basic write test passed");
+          return testRef.remove();
+        })
+        .then(() => {
+          logDebug("Basic cleanup done");
+          startDataMonitoring();
+        })
+        .catch((error) => {
+          logDebug("Basic access test failed: " + error.message);
+        });
+    }
+
+    function startDataMonitoring() {
+      logDebug("Starting data monitoring...");
+      
+      // Listen for latest data in History
+      const latestRef = database.ref('History').limitToLast(1);
+      latestRef.on('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
           const key = Object.keys(data)[0];
           const record = data[key];
-          
-          debugOutput.textContent = `Latest data received: ${key}`;
-          
-          // Extract data with multiple fallback options
-          const bat1Voltage = getNestedValue(record, ['Battery1', 'Voltage'], ['bat1v'], ['battery1Voltage']);
-          const bat1Temp = getNestedValue(record, ['Battery1', 'Temperature'], ['bat1t'], ['battery1Temp']);
-          const bat2Voltage = getNestedValue(record, ['Battery2', 'Voltage'], ['bat2v'], ['battery2Voltage']);
-          const bat2Temp = getNestedValue(record, ['Battery2', 'Temperature'], ['bat2t'], ['battery2Temp']);
-          const loadVoltage = getNestedValue(record, ['LoadVoltage'], ['loadv'], ['loadVoltage']);
-          const activeBattery = getNestedValue(record, ['ActiveBattery'], ['active'], ['activeBattery']);
-          
-          // Update display
-          bat1v.textContent = bat1Voltage ? bat1Voltage.toFixed(2) + 'V' : '--';
-          bat1t.textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
-          bat2v.textContent = bat2Voltage ? bat2Voltage.toFixed(2) + 'V' : '--';
-          bat2t.textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
-          loadV.textContent = loadVoltage ? loadVoltage.toFixed(2) + 'V' : '--';
-          active.textContent = 'Active: ' + (activeBattery || '--');
-          
-          // Update colors
-          if (bat1Voltage) updateVoltageColor(bat1v, bat1Voltage);
-          if (bat2Voltage) updateVoltageColor(bat2v, bat2Voltage);
-          if (loadVoltage) updateVoltageColor(loadV, loadVoltage);
-          
-          // Update system status
-          if (activeBattery === "No Safe Battery") {
-            systemStatus.textContent = "Critical";
-            systemStatus.className = "status-value voltage-danger";
-          } else if (activeBattery && activeBattery !== "None") {
-            systemStatus.textContent = "Operational";
-            systemStatus.className = "status-value voltage-good";
-          } else {
-            systemStatus.textContent = "Unknown";
-            systemStatus.className = "status-value voltage-warning";
-          }
-          
-          updateLastUpdated();
+          logDebug(`Received data: ${key}`);
+          updateDisplay(record, key);
         } else {
-          debugOutput.textContent = "No data found in History node";
+          logDebug("No data received from History");
         }
       }, (error) => {
-        debugOutput.textContent = "Error reading latest data: " + error.message;
+        logDebug("Error listening to History: " + error.message);
       });
 
-      // Listen for all history data
-      const historyRef = ref(database, 'History');
-      onValue(historyRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const keys = Object.keys(data).sort().reverse().slice(0, 20); // Last 20 records
-          
-          let html = '<table><tr><th>Date/Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th></tr>';
-          
-          keys.forEach((key) => {
-            const r = data[key];
-            const bat1Voltage = getNestedValue(r, ['Battery1', 'Voltage'], ['bat1v']);
-            const bat1Temp = getNestedValue(r, ['Battery1', 'Temperature'], ['bat1t']);
-            const bat2Voltage = getNestedValue(r, ['Battery2', 'Voltage'], ['bat2v']);
-            const bat2Temp = getNestedValue(r, ['Battery2', 'Temperature'], ['bat2t']);
-            const loadVoltage = getNestedValue(r, ['LoadVoltage'], ['loadv']);
-            const activeBattery = getNestedValue(r, ['ActiveBattery'], ['active']);
-            
-            html += `<tr>
-              <td>${key}</td>
-              <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
-              <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
-              <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
-              <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
-              <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
-              <td>${activeBattery || '--'}</td>
-            </tr>`;
-          });
-          
-          html += '</table>';
-          historyDiv.innerHTML = html;
-        }
-      });
-
-      // Listen for fault logs
-      const faultRef = ref(database, 'FaultLogs');
-      onValue(faultRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const keys = Object.keys(data).sort().reverse();
-          
-          let html = '<table><tr><th>Date/Time</th><th>Bat1 (V)</th><th>Bat2 (V)</th><th>Load (V)</th><th>Active</th><th>Fault Reason</th></tr>';
-          
-          keys.forEach((key) => {
-            const r = data[key];
-            const bat1Voltage = getNestedValue(r, ['Battery1Voltage'], ['bat1v']);
-            const bat2Voltage = getNestedValue(r, ['Battery2Voltage'], ['bat2v']);
-            const loadVoltage = getNestedValue(r, ['LoadVoltage'], ['loadv']);
-            const activeBattery = getNestedValue(r, ['ActiveBattery'], ['active']);
-            const faultReason = getNestedValue(r, ['FaultReason'], ['reason']);
-            
-            html += `<tr>
-              <td>${key}</td>
-              <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
-              <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
-              <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
-              <td>${activeBattery || '--'}</td>
-              <td>${faultReason || 'Unknown'}</td>
-            </tr>`;
-          });
-          
-          html += '</table>';
-          faultsDiv.innerHTML = html;
-        }
-      });
-    }
-
-    // Helper function to get nested values with fallbacks
-    function getNestedValue(obj, ...paths) {
-      for (const path of paths) {
-        let value = obj;
-        for (const key of path) {
-          if (value && typeof value === 'object' && key in value) {
-            value = value[key];
-          } else {
-            value = undefined;
-            break;
+      // Also try to read the entire History to see structure
+      database.ref('History').limitToLast(3).once('value')
+        .then((snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            logDebug("Sample History structure: " + JSON.stringify(data, null, 2));
           }
-        }
-        if (value !== undefined) return value;
-      }
-      return undefined;
+        });
     }
 
-    // Update current date and time
-    function updateCurrentDateTime() {
-      const now = new Date();
-      curDate.textContent = now.toLocaleDateString();
-      curTime.textContent = now.toLocaleTimeString();
+    function updateDisplay(record, key) {
+      logDebug("Updating display with: " + JSON.stringify(record));
+      
+      // Try multiple field name patterns
+      const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
+      const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
+      const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
+      const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
+      const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
+      const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
+      
+      // Update display elements
+      document.getElementById('bat1v').textContent = bat1Voltage ? bat1Voltage.toFixed(2) + 'V' : '--';
+      document.getElementById('bat1t').textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
+      document.getElementById('bat2v').textContent = bat2Voltage ? bat2Voltage.toFixed(2) + 'V' : '--';
+      document.getElementById('bat2t').textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
+      document.getElementById('load').textContent = loadVoltage ? loadVoltage.toFixed(2) + 'V' : '--';
+      document.getElementById('active').textContent = 'Active: ' + (activeBattery || '--');
+      
+      document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      
+      // Update current date/time
+      document.getElementById('curDate').textContent = new Date().toLocaleDateString();
+      document.getElementById('curTime').textContent = new Date().toLocaleTimeString();
     }
 
     // Initialize when page loads
     document.addEventListener('DOMContentLoaded', function() {
-      initializeApp();
-      updateCurrentDateTime();
+      logDebug("Page loaded, starting initialization...");
+      initializeFirebase();
       
-      // Update current time every second
-      setInterval(updateCurrentDateTime, 1000);
+      // Update current time
+      setInterval(() => {
+        document.getElementById('curDate').textContent = new Date().toLocaleDateString();
+        document.getElementById('curTime').textContent = new Date().toLocaleTimeString();
+      }, 1000);
       
-      // Check database root after a short delay
+      // Auto-check database after delay
       setTimeout(() => {
-        debugOutput.textContent += "\nAuto-checking database...";
+        logDebug("Auto-checking database access...");
         window.checkRoot();
-      }, 2000);
+      }, 3000);
     });
   </script>
 </body>
