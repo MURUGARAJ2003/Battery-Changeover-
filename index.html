@@ -256,6 +256,15 @@
     .timestamp {
       white-space: nowrap;
     }
+    
+    .data-sample {
+      background: #e8f5e8;
+      border: 1px solid #4CAF50;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 10px;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 <body>
@@ -275,6 +284,7 @@
         <button class="debug-button" onclick="checkRoot()">Check Database Root</button>
         <button class="debug-button" onclick="checkHistory()">Check History</button>
         <button class="debug-button" onclick="checkFaults()">Check FaultLogs</button>
+        <button class="debug-button" onclick="showLatestData()">Show Latest Data</button>
         <button class="debug-button" onclick="clearDebug()">Clear Debug</button>
       </div>
     </div>
@@ -334,6 +344,12 @@
       </div>
     </div>
 
+    <!-- Data Sample Display -->
+    <div id="dataSample" class="data-sample" style="display: none;">
+      <strong>Latest Data Sample:</strong>
+      <pre id="latestDataSample"></pre>
+    </div>
+
     <!-- History Logs Section -->
     <div class="section">
       <h2 class="section-title">📜 History Logs</h2>
@@ -375,9 +391,12 @@
     const historyContent = document.getElementById("historyContent");
     const faultsContent = document.getElementById("faultsContent");
     const connectionStatus = document.getElementById("connectionStatus");
+    const dataSample = document.getElementById("dataSample");
+    const latestDataSample = document.getElementById("latestDataSample");
 
     // Global variables
     let app, database;
+    let latestData = null;
 
     // Debug functions
     function logDebug(message) {
@@ -444,9 +463,76 @@
         });
     };
 
+    window.showLatestData = function() {
+      if (latestData) {
+        logDebug("Latest data structure:");
+        logDebug(JSON.stringify(latestData, null, 2));
+        latestDataSample.textContent = JSON.stringify(latestData, null, 2);
+        dataSample.style.display = 'block';
+      } else {
+        logDebug("No latest data available yet");
+      }
+    };
+
     window.clearDebug = function() {
       debugOutput.textContent = "Debug log cleared - " + new Date().toLocaleTimeString();
+      dataSample.style.display = 'none';
     };
+
+    // Improved data extraction function
+    function extractData(record) {
+      // Try multiple field name patterns for each value
+      const bat1Voltage = 
+        record.Battery1?.Voltage || 
+        record.bat1v || 
+        record.battery1Voltage ||
+        record.Bat1V ||
+        record.bat1Voltage;
+      
+      const bat1Temp = 
+        record.Battery1?.Temperature || 
+        record.bat1t || 
+        record.battery1Temp ||
+        record.Bat1T ||
+        record.bat1Temp;
+      
+      const bat2Voltage = 
+        record.Battery2?.Voltage || 
+        record.bat2v || 
+        record.battery2Voltage ||
+        record.Bat2V ||
+        record.bat2Voltage;
+      
+      const bat2Temp = 
+        record.Battery2?.Temperature || 
+        record.bat2t || 
+        record.battery2Temp ||
+        record.Bat2T ||
+        record.bat2Temp;
+      
+      const loadVoltage = 
+        record.LoadVoltage || 
+        record.loadv || 
+        record.loadVoltage ||
+        record.LoadV ||
+        record.load;
+      
+      const activeBattery = 
+        record.ActiveBattery || 
+        record.active || 
+        record.activeBattery ||
+        record.Active ||
+        record.battery;
+
+      return {
+        bat1Voltage,
+        bat1Temp,
+        bat2Voltage,
+        bat2Temp,
+        loadVoltage,
+        activeBattery
+      };
+    }
 
     // Update History Table
     function updateHistoryTable(data) {
@@ -475,14 +561,7 @@
 
       keys.forEach((key) => {
         const record = data[key];
-        
-        // Extract data with multiple field name patterns
-        const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
-        const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
-        const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
-        const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
-        const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
-        const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
+        const extracted = extractData(record);
         
         // Format timestamp from key (assuming format: YYYY-M-D_HH:MM:SS)
         const displayTime = key.replace('_', ' ');
@@ -490,12 +569,12 @@
         html += `
           <tr>
             <td class="timestamp">${displayTime}</td>
-            <td>${bat1Voltage ? bat1Voltage.toFixed(2) + 'V' : '--'}</td>
-            <td>${bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--'}</td>
-            <td>${bat2Voltage ? bat2Voltage.toFixed(2) + 'V' : '--'}</td>
-            <td>${bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--'}</td>
-            <td>${loadVoltage ? loadVoltage.toFixed(2) + 'V' : '--'}</td>
-            <td>${activeBattery || '--'}</td>
+            <td>${extracted.bat1Voltage ? extracted.bat1Voltage.toFixed(2) + 'V' : '--'}</td>
+            <td>${extracted.bat1Temp ? extracted.bat1Temp.toFixed(1) + '°C' : '--'}</td>
+            <td>${extracted.bat2Voltage ? extracted.bat2Voltage.toFixed(2) + 'V' : '--'}</td>
+            <td>${extracted.bat2Temp ? extracted.bat2Temp.toFixed(1) + '°C' : '--'}</td>
+            <td>${extracted.loadVoltage ? extracted.loadVoltage.toFixed(2) + 'V' : '--'}</td>
+            <td>${extracted.activeBattery || '--'}</td>
           </tr>
         `;
       });
@@ -539,15 +618,15 @@
 
       keys.forEach((key) => {
         const record = data[key];
+        const extracted = extractData(record);
         
-        // Extract data with multiple field name patterns
-        const bat1Voltage = record.Battery1Voltage || record.Battery1?.Voltage || record.bat1v;
-        const bat1Temp = record.Battery1Temp || record.Battery1?.Temperature || record.bat1t;
-        const bat2Voltage = record.Battery2Voltage || record.Battery2?.Voltage || record.bat2v;
-        const bat2Temp = record.Battery2Temp || record.Battery2?.Temperature || record.bat2t;
-        const loadVoltage = record.LoadVoltage || record.loadv;
-        const activeBattery = record.ActiveBattery || record.active;
-        const faultReason = record.FaultReason || record.reason || 'Unknown';
+        // For fault logs, also extract fault-specific fields
+        const faultReason = 
+          record.FaultReason || 
+          record.reason || 
+          record.fault || 
+          record.Fault || 
+          'Unknown';
         
         // Format timestamp from key
         const displayTime = key.replace('_', ' ');
@@ -555,12 +634,12 @@
         html += `
           <tr>
             <td class="timestamp">${displayTime}</td>
-            <td>${bat1Voltage ? bat1Voltage.toFixed(2) + 'V' : '--'}</td>
-            <td>${bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--'}</td>
-            <td>${bat2Voltage ? bat2Voltage.toFixed(2) + 'V' : '--'}</td>
-            <td>${bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--'}</td>
-            <td>${loadVoltage ? loadVoltage.toFixed(2) + 'V' : '--'}</td>
-            <td>${activeBattery || '--'}</td>
+            <td>${extracted.bat1Voltage ? extracted.bat1Voltage.toFixed(2) + 'V' : '--'}</td>
+            <td>${extracted.bat1Temp ? extracted.bat1Temp.toFixed(1) + '°C' : '--'}</td>
+            <td>${extracted.bat2Voltage ? extracted.bat2Voltage.toFixed(2) + 'V' : '--'}</td>
+            <td>${extracted.bat2Temp ? extracted.bat2Temp.toFixed(1) + '°C' : '--'}</td>
+            <td>${extracted.loadVoltage ? extracted.loadVoltage.toFixed(2) + 'V' : '--'}</td>
+            <td>${extracted.activeBattery || '--'}</td>
             <td class="fault-reason" title="${faultReason}">${faultReason}</td>
           </tr>
         `;
@@ -579,40 +658,47 @@
 
     // Update current display with latest data
     function updateCurrentDisplay(record, key) {
-      // Extract data with multiple field name patterns
-      const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
-      const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
-      const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
-      const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
-      const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
-      const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
+      latestData = record; // Store for debugging
+      
+      const extracted = extractData(record);
+      
+      logDebug(`Updating display with: Bat1V=${extracted.bat1Voltage}, Bat2V=${extracted.bat2Voltage}, LoadV=${extracted.loadVoltage}, Active=${extracted.activeBattery}`);
       
       // Update display elements
-      document.getElementById('bat1v').textContent = bat1Voltage ? bat1Voltage.toFixed(2) + 'V' : '--';
-      document.getElementById('bat1t').textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
-      document.getElementById('bat2v').textContent = bat2Voltage ? bat2Voltage.toFixed(2) + 'V' : '--';
-      document.getElementById('bat2t').textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
-      document.getElementById('load').textContent = loadVoltage ? loadVoltage.toFixed(2) + 'V' : '--';
-      document.getElementById('active').textContent = 'Active: ' + (activeBattery || '--');
+      document.getElementById('bat1v').textContent = extracted.bat1Voltage ? extracted.bat1Voltage.toFixed(2) + 'V' : '--';
+      document.getElementById('bat1t').textContent = extracted.bat1Temp ? extracted.bat1Temp.toFixed(1) + '°C' : '--';
+      document.getElementById('bat2v').textContent = extracted.bat2Voltage ? extracted.bat2Voltage.toFixed(2) + 'V' : '--';
+      document.getElementById('bat2t').textContent = extracted.bat2Temp ? extracted.bat2Temp.toFixed(1) + '°C' : '--';
+      document.getElementById('load').textContent = extracted.loadVoltage ? extracted.loadVoltage.toFixed(2) + 'V' : '--';
+      document.getElementById('active').textContent = 'Active: ' + (extracted.activeBattery || '--');
       
       // Update voltage colors
-      updateVoltageColor(document.getElementById('bat1v'), bat1Voltage);
-      updateVoltageColor(document.getElementById('bat2v'), bat2Voltage);
-      updateVoltageColor(document.getElementById('load'), loadVoltage);
+      updateVoltageColor(document.getElementById('bat1v'), extracted.bat1Voltage);
+      updateVoltageColor(document.getElementById('bat2v'), extracted.bat2Voltage);
+      updateVoltageColor(document.getElementById('load'), extracted.loadVoltage);
       
       // Update system status
-      if (activeBattery === "No Safe Battery") {
-        document.getElementById('systemStatus').textContent = "Critical";
-        document.getElementById('systemStatus').className = "status-value voltage-danger";
-      } else if (activeBattery && activeBattery !== "None") {
-        document.getElementById('systemStatus').textContent = "Operational";
-        document.getElementById('systemStatus').className = "status-value voltage-good";
-      } else {
-        document.getElementById('systemStatus').textContent = "Unknown";
-        document.getElementById('systemStatus').className = "status-value voltage-warning";
-      }
+      updateSystemStatus(extracted.activeBattery);
       
       document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    }
+
+    function updateSystemStatus(activeBattery) {
+      const systemStatusElement = document.getElementById('systemStatus');
+      
+      if (!activeBattery || activeBattery === '--') {
+        systemStatusElement.textContent = "Unknown";
+        systemStatusElement.className = "status-value voltage-warning";
+      } else if (activeBattery === "No Safe Battery" || activeBattery === "none" || activeBattery === "None") {
+        systemStatusElement.textContent = "Critical";
+        systemStatusElement.className = "status-value voltage-danger";
+      } else if (activeBattery && activeBattery !== "None" && activeBattery !== "none") {
+        systemStatusElement.textContent = "Operational";
+        systemStatusElement.className = "status-value voltage-good";
+      } else {
+        systemStatusElement.textContent = "Unknown";
+        systemStatusElement.className = "status-value voltage-warning";
+      }
     }
 
     function updateVoltageColor(element, voltage) {
