@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Battery Changeover Monitor</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
     :root {
       --primary: #2E7D32;
@@ -358,21 +356,33 @@
     </div>
   </div>
 
-  <script>
-    // Firebase configuration
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+    import { 
+      getDatabase, 
+      ref, 
+      onValue, 
+      query, 
+      limitToLast,
+      onDisconnect,
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+
+    // Your web app's Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyAPgh051TeLWe6SPtVhk_A241addyIyfUM",
       authDomain: "lithium-ion-battery-changeover.firebaseapp.com",
       databaseURL: "https://lithium-ion-battery-changeover-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "lithium-ion-battery-changeover",
-      storageBucket: "lithium-ion-battery-changeover.appspot.com",
+      storageBucket: "lithium-ion-battery-changeover.firebasestorage.app",
       messagingSenderId: "186918574175",
       appId: "1:186918574175:web:942c0ba9fb678c447ce3ea"
     };
 
     // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
 
     // DOM elements
     const curDate = document.getElementById("curDate");
@@ -390,37 +400,38 @@
     const connectionStatus = document.getElementById("connectionStatus");
     const debugOutput = document.getElementById("debugOutput");
 
+    // Global variables for Firebase references
+    let latestRef, historyRef, faultRef;
+
     // Debug function to check database structure
-    function checkDatabase() {
+    window.checkDatabase = function() {
       debugOutput.textContent = "Checking database structure...";
       
       // Check root nodes
-      database.ref('/').once('value')
-        .then((snapshot) => {
-          const data = snapshot.val();
-          debugOutput.textContent = "Database root nodes:\n" + JSON.stringify(data, null, 2);
-        })
-        .catch((error) => {
-          debugOutput.textContent = "Error accessing database: " + error.message;
-        });
-    }
+      const rootRef = ref(database, '/');
+      onValue(rootRef, (snapshot) => {
+        const data = snapshot.val();
+        debugOutput.textContent = "Database root nodes:\n" + JSON.stringify(data, null, 2);
+      }, (error) => {
+        debugOutput.textContent = "Error accessing database: " + error.message;
+      });
+    };
 
     // Test Firebase connection
-    function checkFirebaseConnection() {
+    window.checkFirebaseConnection = function() {
       debugOutput.textContent = "Testing Firebase connection...";
       
-      database.ref('.info/connected').once('value')
-        .then((snapshot) => {
-          if (snapshot.val() === true) {
-            debugOutput.textContent = "Firebase connection successful!";
-          } else {
-            debugOutput.textContent = "Firebase connection failed!";
-          }
-        })
-        .catch((error) => {
-          debugOutput.textContent = "Firebase connection error: " + error.message;
-        });
-    }
+      const connectedRef = ref(database, '.info/connected');
+      onValue(connectedRef, (snapshot) => {
+        if (snapshot.val() === true) {
+          debugOutput.textContent = "Firebase connection successful!";
+        } else {
+          debugOutput.textContent = "Firebase connection failed!";
+        }
+      }, (error) => {
+        debugOutput.textContent = "Firebase connection error: " + error.message;
+      });
+    };
 
     // Update last updated timestamp
     function updateLastUpdated() {
@@ -466,169 +477,177 @@
       }
     }
 
-    // ---------------- Current Status ----------------
-    const latestRef = database.ref('History').limitToLast(1);
-    latestRef.on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        console.log("No data found in History node");
-        return;
-      }
-      
-      const key = Object.keys(data)[0];
-      const record = data[key];
-      
-      console.log("Latest record:", record);
-      
-      // Update current status with fallbacks for different field name possibilities
-      curDate.textContent = record.Date || record.date || formatDateFromKey(key);
-      curTime.textContent = record.Time || record.time || formatTimeFromKey(key);
-      
-      // Handle different possible field structures
-      const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
-      const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
-      const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
-      const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
-      const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
-      const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
-      
-      bat1v.textContent = bat1Voltage ? bat1Voltage.toFixed(2) : '--';
-      bat1t.textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
-      bat2v.textContent = bat2Voltage ? bat2Voltage.toFixed(2) : '--';
-      bat2t.textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
-      loadV.textContent = loadVoltage ? loadVoltage.toFixed(2) : '--';
-      active.textContent = 'Active: ' + (activeBattery || '--');
-      
-      // Update voltage colors
-      if (bat1Voltage) updateVoltageColor(bat1v, bat1Voltage);
-      if (bat2Voltage) updateVoltageColor(bat2v, bat2Voltage);
-      if (loadVoltage) updateVoltageColor(loadV, loadVoltage);
-      
-      // Update system status
-      if (activeBattery === "No Safe Battery" || activeBattery === "none") {
-        systemStatus.textContent = "Critical";
-        systemStatus.classList.remove('voltage-good', 'voltage-warning');
-        systemStatus.classList.add('voltage-danger');
-      } else if (activeBattery && activeBattery !== "None" && activeBattery !== "none") {
-        systemStatus.textContent = "Operational";
-        systemStatus.classList.remove('voltage-warning', 'voltage-danger');
-        systemStatus.classList.add('voltage-good');
-      } else {
-        systemStatus.textContent = "Unknown";
-        systemStatus.classList.remove('voltage-good', 'voltage-danger');
-        systemStatus.classList.add('voltage-warning');
-      }
-      
+    // Initialize Firebase listeners
+    function initializeFirebaseListeners() {
+      // ---------------- Current Status ----------------
+      latestRef = query(ref(database, 'History'), limitToLast(1));
+      onValue(latestRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          console.log("No data found in History node");
+          debugOutput.textContent = "No data found in History node";
+          return;
+        }
+        
+        const key = Object.keys(data)[0];
+        const record = data[key];
+        
+        console.log("Latest record:", record);
+        
+        // Update current status with fallbacks for different field name possibilities
+        curDate.textContent = record.Date || record.date || formatDateFromKey(key);
+        curTime.textContent = record.Time || record.time || formatTimeFromKey(key);
+        
+        // Handle different possible field structures
+        const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
+        const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
+        const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
+        const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
+        const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
+        const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
+        
+        bat1v.textContent = bat1Voltage ? bat1Voltage.toFixed(2) : '--';
+        bat1t.textContent = bat1Temp ? bat1Temp.toFixed(1) + '°C' : '--';
+        bat2v.textContent = bat2Voltage ? bat2Voltage.toFixed(2) : '--';
+        bat2t.textContent = bat2Temp ? bat2Temp.toFixed(1) + '°C' : '--';
+        loadV.textContent = loadVoltage ? loadVoltage.toFixed(2) : '--';
+        active.textContent = 'Active: ' + (activeBattery || '--');
+        
+        // Update voltage colors
+        if (bat1Voltage) updateVoltageColor(bat1v, bat1Voltage);
+        if (bat2Voltage) updateVoltageColor(bat2v, bat2Voltage);
+        if (loadVoltage) updateVoltageColor(loadV, loadVoltage);
+        
+        // Update system status
+        if (activeBattery === "No Safe Battery" || activeBattery === "none") {
+          systemStatus.textContent = "Critical";
+          systemStatus.classList.remove('voltage-good', 'voltage-warning');
+          systemStatus.classList.add('voltage-danger');
+        } else if (activeBattery && activeBattery !== "None" && activeBattery !== "none") {
+          systemStatus.textContent = "Operational";
+          systemStatus.classList.remove('voltage-warning', 'voltage-danger');
+          systemStatus.classList.add('voltage-good');
+        } else {
+          systemStatus.textContent = "Unknown";
+          systemStatus.classList.remove('voltage-good', 'voltage-danger');
+          systemStatus.classList.add('voltage-warning');
+        }
+        
+        updateLastUpdated();
+      }, (error) => {
+        console.error("Error reading History:", error);
+        debugOutput.textContent = "Error reading History: " + error.message;
+      });
+
+      // ---------------- History Table ----------------
+      historyRef = ref(database, 'History');
+      onValue(historyRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          historyDiv.innerHTML = '<div class="no-data">No history data available</div>';
+          return;
+        }
+
+        let html = '<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active Battery</th></tr>';
+        
+        Object.keys(data).sort().reverse().forEach((key) => {
+          const r = data[key];
+          
+          // Handle different possible field structures
+          const displayDate = r.Date || r.date || formatDateFromKey(key);
+          const displayTime = r.Time || r.time || formatTimeFromKey(key);
+          const bat1Voltage = r.Battery1?.Voltage || r.bat1v || r.battery1Voltage;
+          const bat1Temp = r.Battery1?.Temperature || r.bat1t || r.battery1Temp;
+          const bat2Voltage = r.Battery2?.Voltage || r.bat2v || r.battery2Voltage;
+          const bat2Temp = r.Battery2?.Temperature || r.bat2t || r.battery2Temp;
+          const loadVoltage = r.LoadVoltage || r.loadv || r.loadVoltage;
+          const activeBattery = r.ActiveBattery || r.active || r.activeBattery;
+          
+          html += `<tr>
+            <td>${displayDate}</td>
+            <td>${displayTime}</td>
+            <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
+            <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
+            <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
+            <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
+            <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
+            <td>${activeBattery || '--'}</td>
+          </tr>`;
+        });
+        
+        html += '</table>';
+        historyDiv.innerHTML = html;
+      }, (error) => {
+        console.error("Error reading History for table:", error);
+        historyDiv.innerHTML = '<div class="no-data">Error loading history: ' + error.message + '</div>';
+      });
+
+      // ---------------- Fault Logs ----------------
+      faultRef = ref(database, 'FaultLogs');
+      onValue(faultRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          faultsDiv.innerHTML = '<div class="no-data">No faults detected</div>';
+          return;
+        }
+
+        let html = '<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th><th>Fault Reason</th></tr>';
+        
+        Object.keys(data).sort().reverse().forEach((key) => {
+          const r = data[key];
+          
+          // Handle different possible field structures
+          const displayDate = r.Date || r.date || formatDateFromKey(key);
+          const displayTime = r.Time || r.time || formatTimeFromKey(key);
+          const bat1Voltage = r.Battery1Voltage || r.bat1v || r.Battery1?.Voltage;
+          const bat1Temp = r.Battery1Temp || r.bat1t || r.Battery1?.Temperature;
+          const bat2Voltage = r.Battery2Voltage || r.bat2v || r.Battery2?.Voltage;
+          const bat2Temp = r.Battery2Temp || r.bat2t || r.Battery2?.Temperature;
+          const loadVoltage = r.LoadVoltage || r.loadv;
+          const activeBattery = r.ActiveBattery || r.active;
+          const faultReason = r.FaultReason || r.fault || r.reason;
+          
+          html += `<tr>
+            <td>${displayDate}</td>
+            <td>${displayTime}</td>
+            <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
+            <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
+            <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
+            <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
+            <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
+            <td>${activeBattery || '--'}</td>
+            <td class="fault-reason" title="${faultReason || 'Unknown'}">${faultReason || 'Unknown'}</td>
+          </tr>`;
+        });
+        
+        html += '</table>';
+        faultsDiv.innerHTML = html;
+      }, (error) => {
+        console.error("Error reading FaultLogs:", error);
+        faultsDiv.innerHTML = '<div class="no-data">Error loading faults: ' + error.message + '</div>';
+      });
+
+      // Connection status monitoring
+      const connectedRef = ref(database, '.info/connected');
+      onValue(connectedRef, (snapshot) => {
+        if (snapshot.val() === true) {
+          connectionStatus.textContent = "Connected to Firebase";
+          connectionStatus.parentElement.style.background = "#4CAF50";
+        } else {
+          connectionStatus.textContent = "Disconnected from Firebase";
+          connectionStatus.parentElement.style.background = "#F44336";
+        }
+      });
+    }
+
+    // Initialize everything when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeFirebaseListeners();
       updateLastUpdated();
-    }, (error) => {
-      console.error("Error reading History:", error);
-      debugOutput.textContent = "Error reading History: " + error.message;
-    });
-
-    // ---------------- History Table ----------------
-    const historyRef = database.ref('History');
-    historyRef.on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        historyDiv.innerHTML = '<div class="no-data">No history data available</div>';
-        return;
-      }
-
-      let html = '<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active Battery</th></tr>';
       
-      Object.keys(data).sort().reverse().forEach((key) => {
-        const r = data[key];
-        
-        // Handle different possible field structures
-        const displayDate = r.Date || r.date || formatDateFromKey(key);
-        const displayTime = r.Time || r.time || formatTimeFromKey(key);
-        const bat1Voltage = r.Battery1?.Voltage || r.bat1v || r.battery1Voltage;
-        const bat1Temp = r.Battery1?.Temperature || r.bat1t || r.battery1Temp;
-        const bat2Voltage = r.Battery2?.Voltage || r.bat2v || r.battery2Voltage;
-        const bat2Temp = r.Battery2?.Temperature || r.bat2t || r.battery2Temp;
-        const loadVoltage = r.LoadVoltage || r.loadv || r.loadVoltage;
-        const activeBattery = r.ActiveBattery || r.active || r.activeBattery;
-        
-        html += `<tr>
-          <td>${displayDate}</td>
-          <td>${displayTime}</td>
-          <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
-          <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
-          <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
-          <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
-          <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
-          <td>${activeBattery || '--'}</td>
-        </tr>`;
-      });
-      
-      html += '</table>';
-      historyDiv.innerHTML = html;
-    }, (error) => {
-      console.error("Error reading History for table:", error);
-      historyDiv.innerHTML = '<div class="no-data">Error loading history: ' + error.message + '</div>';
+      // Check database after a short delay
+      setTimeout(checkDatabase, 2000);
     });
-
-    // ---------------- Fault Logs ----------------
-    const faultRef = database.ref('FaultLogs');
-    faultRef.on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        faultsDiv.innerHTML = '<div class="no-data">No faults detected</div>';
-        return;
-      }
-
-      let html = '<table><tr><th>Date</th><th>Time</th><th>Bat1 (V)</th><th>Bat1 (°C)</th><th>Bat2 (V)</th><th>Bat2 (°C)</th><th>Load (V)</th><th>Active</th><th>Fault Reason</th></tr>';
-      
-      Object.keys(data).sort().reverse().forEach((key) => {
-        const r = data[key];
-        
-        // Handle different possible field structures
-        const displayDate = r.Date || r.date || formatDateFromKey(key);
-        const displayTime = r.Time || r.time || formatTimeFromKey(key);
-        const bat1Voltage = r.Battery1Voltage || r.bat1v || r.Battery1?.Voltage;
-        const bat1Temp = r.Battery1Temp || r.bat1t || r.Battery1?.Temperature;
-        const bat2Voltage = r.Battery2Voltage || r.bat2v || r.Battery2?.Voltage;
-        const bat2Temp = r.Battery2Temp || r.bat2t || r.Battery2?.Temperature;
-        const loadVoltage = r.LoadVoltage || r.loadv;
-        const activeBattery = r.ActiveBattery || r.active;
-        const faultReason = r.FaultReason || r.fault || r.reason;
-        
-        html += `<tr>
-          <td>${displayDate}</td>
-          <td>${displayTime}</td>
-          <td>${bat1Voltage ? bat1Voltage.toFixed(2) : '--'}</td>
-          <td>${bat1Temp ? bat1Temp.toFixed(1) : '--'}</td>
-          <td>${bat2Voltage ? bat2Voltage.toFixed(2) : '--'}</td>
-          <td>${bat2Temp ? bat2Temp.toFixed(1) : '--'}</td>
-          <td>${loadVoltage ? loadVoltage.toFixed(2) : '--'}</td>
-          <td>${activeBattery || '--'}</td>
-          <td class="fault-reason" title="${faultReason || 'Unknown'}">${faultReason || 'Unknown'}</td>
-        </tr>`;
-      });
-      
-      html += '</table>';
-      faultsDiv.innerHTML = html;
-    }, (error) => {
-      console.error("Error reading FaultLogs:", error);
-      faultsDiv.innerHTML = '<div class="no-data">Error loading faults: ' + error.message + '</div>';
-    });
-
-    // Connection status monitoring
-    database.ref('.info/connected').on('value', (snapshot) => {
-      if (snapshot.val() === true) {
-        connectionStatus.textContent = "Connected to Firebase";
-        connectionStatus.parentElement.style.background = "#4CAF50";
-      } else {
-        connectionStatus.textContent = "Disconnected from Firebase";
-        connectionStatus.parentElement.style.background = "#F44336";
-      }
-    });
-
-    // Initial call to update last updated
-    updateLastUpdated();
-    
-    // Check database on load
-    setTimeout(checkDatabase, 1000);
   </script>
 </body>
 </html>
