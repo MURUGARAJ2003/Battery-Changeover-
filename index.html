@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Battery Changeover Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --primary: #2E7D32;
@@ -256,6 +257,34 @@
     .timestamp {
       white-space: nowrap;
     }
+    
+    /* Chart Styles */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .chart-container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      height: 300px;
+    }
+    
+    .chart-title {
+      font-size: 1.1rem;
+      color: var(--primary-dark);
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    
+    .chart-wrapper {
+      position: relative;
+      height: calc(100% - 30px);
+    }
   </style>
 </head>
 <body>
@@ -334,6 +363,37 @@
       </div>
     </div>
 
+    <!-- Charts Section -->
+    <div class="section">
+      <h2 class="section-title">📈 Data Visualization</h2>
+      <div class="charts-grid">
+        <div class="chart-container">
+          <div class="chart-title">Voltage Trends</div>
+          <div class="chart-wrapper">
+            <canvas id="voltageChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Temperature Trends</div>
+          <div class="chart-wrapper">
+            <canvas id="temperatureChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Battery Status Over Time</div>
+          <div class="chart-wrapper">
+            <canvas id="batteryStatusChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Active Battery Distribution</div>
+          <div class="chart-wrapper">
+            <canvas id="batteryDistributionChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- History Logs Section -->
     <div class="section">
       <h2 class="section-title">📜 History Logs</h2>
@@ -376,8 +436,12 @@
     const faultsContent = document.getElementById("faultsContent");
     const connectionStatus = document.getElementById("connectionStatus");
 
+    // Chart instances
+    let voltageChart, temperatureChart, batteryStatusChart, batteryDistributionChart;
+
     // Global variables
     let app, database;
+    let allHistoryData = {};
 
     // Debug functions
     function logDebug(message) {
@@ -413,7 +477,9 @@
           if (data) {
             const keys = Object.keys(data);
             logDebug(`History node found with ${keys.length} records`);
+            allHistoryData = data;
             updateHistoryTable(data);
+            updateAllCharts();
           } else {
             logDebug("No data found in History node");
             historyContent.innerHTML = '<div class="no-data">No history data available</div>';
@@ -447,6 +513,305 @@
     window.clearDebug = function() {
       debugOutput.textContent = "Debug log cleared - " + new Date().toLocaleTimeString();
     };
+
+    // Initialize Charts
+    function initializeCharts() {
+      // Voltage Chart
+      const voltageCtx = document.getElementById('voltageChart').getContext('2d');
+      voltageChart = new Chart(voltageCtx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Battery 1 Voltage',
+              borderColor: '#4CAF50',
+              backgroundColor: 'rgba(76, 175, 80, 0.1)',
+              data: [],
+              tension: 0.4,
+              fill: true
+            },
+            {
+              label: 'Battery 2 Voltage',
+              borderColor: '#2196F3',
+              backgroundColor: 'rgba(33, 150, 243, 0.1)',
+              data: [],
+              tension: 0.4,
+              fill: true
+            },
+            {
+              label: 'Load Voltage',
+              borderColor: '#FF9800',
+              backgroundColor: 'rgba(255, 152, 0, 0.1)',
+              data: [],
+              tension: 0.4,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Voltage Over Time'
+            }
+          },
+          scales: {
+            y: {
+              title: {
+                display: true,
+                text: 'Voltage (V)'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Time'
+              }
+            }
+          }
+        }
+      });
+
+      // Temperature Chart
+      const tempCtx = document.getElementById('temperatureChart').getContext('2d');
+      temperatureChart = new Chart(tempCtx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Battery 1 Temperature',
+              borderColor: '#E91E63',
+              backgroundColor: 'rgba(233, 30, 99, 0.1)',
+              data: [],
+              tension: 0.4,
+              fill: true
+            },
+            {
+              label: 'Battery 2 Temperature',
+              borderColor: '#9C27B0',
+              backgroundColor: 'rgba(156, 39, 176, 0.1)',
+              data: [],
+              tension: 0.4,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Temperature Over Time'
+            }
+          },
+          scales: {
+            y: {
+              title: {
+                display: true,
+                text: 'Temperature (°C)'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Time'
+              }
+            }
+          }
+        }
+      });
+
+      // Battery Status Chart
+      const statusCtx = document.getElementById('batteryStatusChart').getContext('2d');
+      batteryStatusChart = new Chart(statusCtx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Active Battery',
+              data: [],
+              backgroundColor: [],
+              borderColor: [],
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Battery Status History'
+            },
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              title: {
+                display: true,
+                text: 'Battery'
+              },
+              ticks: {
+                callback: function(value) {
+                  const batteries = ['None', 'Battery1', 'Battery2', 'No Safe Battery'];
+                  return batteries[value] || '';
+                }
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Time'
+              }
+            }
+          }
+        }
+      });
+
+      // Battery Distribution Chart
+      const distCtx = document.getElementById('batteryDistributionChart').getContext('2d');
+      batteryDistributionChart = new Chart(distCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Battery1', 'Battery2', 'No Safe Battery', 'None'],
+          datasets: [{
+            data: [0, 0, 0, 0],
+            backgroundColor: [
+              '#4CAF50',
+              '#2196F3',
+              '#F44336',
+              '#FFC107'
+            ],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Active Battery Distribution'
+            },
+            legend: {
+              position: 'bottom'
+            }
+          }
+        }
+      });
+    }
+
+    // Update all charts with history data
+    function updateAllCharts() {
+      if (!allHistoryData || Object.keys(allHistoryData).length === 0) return;
+      
+      const keys = Object.keys(allHistoryData).sort();
+      const limitedKeys = keys.slice(-50); // Show last 50 data points for clarity
+      
+      const labels = limitedKeys.map(key => {
+        const parts = key.split('_');
+        return parts.length > 1 ? parts[1] : key; // Show time part only
+      });
+      
+      const bat1vData = [];
+      const bat2vData = [];
+      const loadvData = [];
+      const bat1tData = [];
+      const bat2tData = [];
+      const activeBatteryData = [];
+      const batteryColors = [];
+      
+      limitedKeys.forEach(key => {
+        const record = allHistoryData[key];
+        
+        // Extract data with multiple field name patterns
+        const bat1Voltage = record.Battery1?.Voltage || record.bat1v || record.battery1Voltage;
+        const bat1Temp = record.Battery1?.Temperature || record.bat1t || record.battery1Temp;
+        const bat2Voltage = record.Battery2?.Voltage || record.bat2v || record.battery2Voltage;
+        const bat2Temp = record.Battery2?.Temperature || record.bat2t || record.battery2Temp;
+        const loadVoltage = record.LoadVoltage || record.loadv || record.loadVoltage;
+        const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
+        
+        bat1vData.push(bat1Voltage || 0);
+        bat2vData.push(bat2Voltage || 0);
+        loadvData.push(loadVoltage || 0);
+        bat1tData.push(bat1Temp || 0);
+        bat2tData.push(bat2Temp || 0);
+        
+        // Map battery status to numeric values for chart
+        let batteryValue = 0; // None
+        let batteryColor = '#FFC107'; // Yellow for None
+        
+        if (activeBattery === 'Battery1') {
+          batteryValue = 1;
+          batteryColor = '#4CAF50'; // Green
+        } else if (activeBattery === 'Battery2') {
+          batteryValue = 2;
+          batteryColor = '#2196F3'; // Blue
+        } else if (activeBattery === 'No Safe Battery') {
+          batteryValue = 3;
+          batteryColor = '#F44336'; // Red
+        }
+        
+        activeBatteryData.push(batteryValue);
+        batteryColors.push(batteryColor);
+      });
+      
+      // Update Voltage Chart
+      voltageChart.data.labels = labels;
+      voltageChart.data.datasets[0].data = bat1vData;
+      voltageChart.data.datasets[1].data = bat2vData;
+      voltageChart.data.datasets[2].data = loadvData;
+      voltageChart.update();
+      
+      // Update Temperature Chart
+      temperatureChart.data.labels = labels;
+      temperatureChart.data.datasets[0].data = bat1tData;
+      temperatureChart.data.datasets[1].data = bat2tData;
+      temperatureChart.update();
+      
+      // Update Battery Status Chart
+      batteryStatusChart.data.labels = labels;
+      batteryStatusChart.data.datasets[0].data = activeBatteryData;
+      batteryStatusChart.data.datasets[0].backgroundColor = batteryColors;
+      batteryStatusChart.data.datasets[0].borderColor = batteryColors;
+      batteryStatusChart.update();
+      
+      // Update Battery Distribution Chart
+      updateBatteryDistributionChart(keys);
+    }
+    
+    // Update battery distribution chart
+    function updateBatteryDistributionChart(keys) {
+      let battery1Count = 0;
+      let battery2Count = 0;
+      let noSafeCount = 0;
+      let noneCount = 0;
+      
+      keys.forEach(key => {
+        const record = allHistoryData[key];
+        const activeBattery = record.ActiveBattery || record.active || record.activeBattery;
+        
+        if (activeBattery === 'Battery1') battery1Count++;
+        else if (activeBattery === 'Battery2') battery2Count++;
+        else if (activeBattery === 'No Safe Battery') noSafeCount++;
+        else noneCount++;
+      });
+      
+      batteryDistributionChart.data.datasets[0].data = [
+        battery1Count, battery2Count, noSafeCount, noneCount
+      ];
+      batteryDistributionChart.update();
+    }
 
     // Update History Table
     function updateHistoryTable(data) {
@@ -638,6 +1003,9 @@
         
         logDebug("Firebase initialized, setting up listeners...");
         
+        // Initialize charts
+        initializeCharts();
+        
         // Monitor connection state
         const connectedRef = firebase.database().ref('.info/connected');
         connectedRef.on('value', (snapshot) => {
@@ -686,7 +1054,9 @@
         const data = snapshot.val();
         if (data) {
           logDebug(`History data updated: ${Object.keys(data).length} records`);
+          allHistoryData = data;
           updateHistoryTable(data);
+          updateAllCharts();
         }
       });
 
